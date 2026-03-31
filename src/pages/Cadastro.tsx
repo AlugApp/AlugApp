@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
 import type { IconBaseProps } from 'react-icons';
 import { FaFacebookF, FaGoogle, FaApple } from 'react-icons/fa';
 import { Eye, EyeOff } from 'lucide-react';
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 type MessageState = { type: 'success' | 'error'; text: string } | null;
 
@@ -66,6 +61,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
     setLoading(true);
     setMessage(null);
 
+    // ── Validações ──────────────────────────────────────────────────────────
     if (formData.password !== formData.confirmPassword) {
       setMessage({ type: 'error', text: 'As senhas não coincidem!' });
       setLoading(false);
@@ -82,21 +78,62 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       return;
     }
 
-    const { confirmPassword, rg, ...dataToSend } = formData;
-
     try {
-      const { data, error } = await supabase.from('users').insert([dataToSend]).select();
-      if (error) {
-        setMessage({ type: 'error', text: error.message });
-      } else if (data && data.length > 0) {
-        setMessage({ type: 'success', text: `Bem-vindo, ${data[0].fullName || ''}!` });
-        setFormData({
-          fullName: '', email: '', rg: '', cpf: '', birthDate: '',
-          phone: '', gender: '', address: '', apartment: '', block: '',
-          password: '', confirmPassword: '',
-        });
-        setTimeout(() => onGoToLogin(), 1000);
+      // ── 1. Cria conta no Supabase Auth (senha hasheada automaticamente) ──
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (authError) {
+        setMessage({ type: 'error', text: authError.message });
+        setLoading(false);
+        return;
       }
+
+      if (!authData.user) {
+        setMessage({ type: 'error', text: 'Erro ao criar a conta. Tente novamente.' });
+        setLoading(false);
+        return;
+      }
+
+      // ── 2. Insere perfil na tabela users (SEM senha) ──────────────────────
+      const { error: profileError } = await supabase.from('users').insert([{
+        auth_id: authData.user.id,
+        fullName: formData.fullName,
+        email: formData.email,
+        cpf: formData.cpf,
+        birthDate: formData.birthDate,
+        phone: formData.phone,
+        gender: formData.gender,
+        address: formData.address,
+        apartment: formData.apartment,
+        block: formData.block,
+      }]);
+
+      if (profileError) {
+        setMessage({
+          type: 'error',
+          text: 'Conta criada, mas erro ao salvar perfil: ' + profileError.message,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // ── 3. Sucesso ────────────────────────────────────────────────────────
+      setMessage({
+        type: 'success',
+        text: `Conta criada! Enviamos um e-mail de confirmação para ${formData.email}. Verifique sua caixa de entrada antes de fazer login.`,
+      });
+      setFormData({
+        fullName: '', email: '', rg: '', cpf: '', birthDate: '',
+        phone: '', gender: '', address: '', apartment: '', block: '',
+        password: '', confirmPassword: '',
+      });
+      setTimeout(() => onGoToLogin(), 5000);
     } catch {
       setMessage({ type: 'error', text: 'Erro inesperado. Tente novamente.' });
     } finally {
@@ -232,7 +269,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 required
                 disabled={loading}
               />
-              {/* Gênero com seta azul */}
+              {/* Gênero */}
               <div className="relative">
                 <select
                   name="gender"
@@ -257,7 +294,6 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
             {/* Residencial | Apto | Bloco */}
             <div className="grid grid-cols-4 gap-3">
-              {/* Residencial com seta azul — col-span-2 */}
               <div className="relative col-span-2">
                 <select
                   name="address"

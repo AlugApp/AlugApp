@@ -1,11 +1,7 @@
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
 import { ArrowLeft, Star, MessageSquare, Clock, Info, Package, ShoppingBag } from "lucide-react";
 
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 interface DetalhesProps {
   id: number;

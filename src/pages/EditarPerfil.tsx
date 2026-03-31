@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import {
   ArrowLeft,
   Home as HomeIcon,
@@ -8,11 +9,6 @@ import {
   MessageSquare,
   User,
 } from "lucide-react";
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 interface EditarPerfilProps {
   onGoBack: () => void;
@@ -23,6 +19,7 @@ const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) {
+  const { user, profile, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -38,23 +35,24 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
     block: "",
   });
 
+  // Carrega dados do perfil via AuthContext (sem localStorage)
   useEffect(() => {
-    const savedUser = localStorage.getItem("loggedUser");
-    if (savedUser) {
-      const u = JSON.parse(savedUser);
+    if (profile) {
       setForm({
-        fullName:  u.fullName  || "",
-        cpf:       u.cpf       || "",
-        email:     u.email     || "",
-        birthDate: u.birthDate || "",
-        phone:     u.phone     || "",
-        gender:    u.gender    || "",
-        bio:       u.bio       || "",
-        apartment: u.apartment || "",
-        block:     u.block     || "",
+        fullName: profile.fullName || "",
+        cpf: profile.cpf || "",
+        email: profile.email || "",
+        birthDate: profile.birthDate || "",
+        phone: profile.phone || "",
+        gender: profile.gender || "",
+        bio: (profile as any).bio || "",
+        apartment: profile.apartment || "",
+        block: profile.block || "",
       });
+    } else if (user) {
+      setForm((prev) => ({ ...prev, email: user.email || "" }));
     }
-  }, []);
+  }, [profile, user]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -69,28 +67,38 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
     setSaving(true);
     setMsg(null);
 
-    const savedUser = localStorage.getItem("loggedUser");
-    if (!savedUser) return;
-    const user = JSON.parse(savedUser);
+    if (!user) {
+      setMsg({ type: "error", text: "Sessão expirada. Faça login novamente." });
+      setSaving(false);
+      return;
+    }
 
+    // Atualiza perfil na tabela users usando auth_id (sem expor ID numérico)
     const { error } = await supabase
       .from("users")
       .update({
-        fullName:  form.fullName,
-        cpf:       form.cpf,
-        email:     form.email,
+        fullName: form.fullName,
+        cpf: form.cpf,
+        email: form.email,
         birthDate: form.birthDate,
-        phone:     form.phone,
-        gender:    form.gender,
+        phone: form.phone,
+        gender: form.gender,
         apartment: form.apartment,
-        block:     form.block,
+        block: form.block,
       })
-      .eq("id", user.id);
+      .eq("auth_id", user.id);
 
     if (error) {
       setMsg({ type: "error", text: "Erro ao salvar. Tente novamente." });
     } else {
-      localStorage.setItem("loggedUser", JSON.stringify({ ...user, ...form }));
+      // Se o e-mail mudou, atualiza também no Auth (envia confirmação)
+      if (form.email !== user.email) {
+        await supabase.auth.updateUser({ email: form.email });
+      }
+
+      // Atualiza o contexto
+      await refreshProfile();
+
       setMsg({ type: "success", text: "Perfil atualizado com sucesso!" });
       setTimeout(() => onGoBack(), 1200);
     }
@@ -139,7 +147,6 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
                 <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
                   <User className="w-8 h-8 text-blue-600" />
                 </div>
-                {/* Ícone de edição */}
                 <span className="absolute bottom-0.5 right-0 w-5 h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center">
                   <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />

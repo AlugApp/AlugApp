@@ -1,22 +1,17 @@
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
 import type { IconBaseProps } from 'react-icons';
 import { FaFacebookF, FaGoogle, FaApple } from 'react-icons/fa';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 type MessageState = { type: 'success' | 'error'; text: string } | null;
 
 interface LoginFormProps {
   onGoToRegister: () => void;
-  onLoginSuccess: () => void;
+  onLoginSuccess: () => void; // mantido por compatibilidade; o AuthContext gerencia o redirect
 }
 
-const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onLoginSuccess }) => {
+const Login: React.FC<LoginFormProps> = ({ onGoToRegister }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
@@ -30,20 +25,25 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onLoginSuccess }) => 
     setMessage(null);
 
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .eq('password', password)
-        .maybeSingle();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (error || !data) {
-        setMessage({ type: 'error', text: 'E-mail ou senha inválidos.' });
-      } else {
-        setMessage({ type: 'success', text: `Bem-vindo(a), ${data.fullName || ''}` });
-        localStorage.setItem('loggedUser', JSON.stringify(data));
-        setTimeout(() => onLoginSuccess(), 800);
+      if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes('email not confirmed')) {
+          setMessage({
+            type: 'error',
+            text: 'E-mail não confirmado. Verifique sua caixa de entrada e clique no link de confirmação.',
+          });
+        } else if (msg.includes('invalid login credentials') || msg.includes('invalid email or password')) {
+          setMessage({ type: 'error', text: 'E-mail ou senha inválidos.' });
+        } else {
+          setMessage({ type: 'error', text: error.message });
+        }
+        return;
       }
+
+      // Sucesso: o AuthContext detecta a sessão via onAuthStateChange e redireciona
+      setMessage({ type: 'success', text: 'Login realizado! Redirecionando...' });
     } catch {
       setMessage({ type: 'error', text: 'Erro inesperado. Tente novamente.' });
     } finally {

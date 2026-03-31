@@ -1,31 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import {
-  Star,
-  Edit2,
-  Package,
-  HelpCircle,
-  LogOut,
-  ShieldCheck,
-  Bell,
-  Shield,
-  CreditCard,
-  Home as HomeIcon,
-  Search,
-  PlusCircle,
-  MessageSquare,
-  User,
-  Eye,
-  EyeOff,
-  X,
+  Star, Edit2, Package, HelpCircle, LogOut,
+  ShieldCheck, Bell, Shield, CreditCard,
+  Home as HomeIcon, Search, PlusCircle, MessageSquare, User,
+  Eye, EyeOff, X, QrCode,
 } from "lucide-react";
 
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
-
 type Tab = "informacoes" | "seguranca" | "pagamentos";
+type MessageState = { type: "success" | "error"; text: string } | null;
 
 interface PerfilProps {
   onGoBack: () => void;
@@ -34,28 +18,46 @@ interface PerfilProps {
 }
 
 export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps) {
-  const [user, setUser] = useState<any>(null);
+  const { user, profile, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>("informacoes");
 
-  // Modal alterar senha
+  // ─── Alterar Senha ────────────────────────────────────────────────────────
   const [showSenha, setShowSenha] = useState(false);
   const [senhaForm, setSenhaForm] = useState({ atual: "", nova: "", confirmar: "" });
   const [showAtual, setShowAtual] = useState(false);
   const [showNova, setShowNova] = useState(false);
   const [showConfirmar, setShowConfirmar] = useState(false);
   const [senhaLoading, setSenhaLoading] = useState(false);
-  const [senhaMsg, setSenhaMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [senhaMsg, setSenhaMsg] = useState<MessageState>(null);
 
+  // ─── MFA ──────────────────────────────────────────────────────────────────
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [showMfa, setShowMfa] = useState(false);
+  const [mfaEnrollData, setMfaEnrollData] = useState<any>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaMsg, setMfaMsg] = useState<MessageState>(null);
+
+  // Carrega fatores MFA quando entra na aba Segurança
   useEffect(() => {
-    const savedUser = localStorage.getItem("loggedUser");
-    if (savedUser) setUser(JSON.parse(savedUser));
-  }, []);
+    if (tab === "seguranca") {
+      supabase.auth.mfa.listFactors().then(({ data }) => {
+        const verified = data?.totp?.filter((f: any) => f.status === "verified") ?? [];
+        setMfaFactors(verified);
+      });
+    }
+  }, [tab]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("loggedUser");
+  const isMfaActive = mfaFactors.length > 0;
+  const isEmailVerified = !!user?.email_confirmed_at;
+
+  // ─── Logout ───────────────────────────────────────────────────────────────
+  const handleLogout = async () => {
+    await signOut();
     onLogout();
   };
 
+  // ─── Alterar Senha ────────────────────────────────────────────────────────
   const handleAlterarSenha = async (e: React.FormEvent) => {
     e.preventDefault();
     setSenhaMsg(null);
@@ -75,27 +77,24 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
 
     setSenhaLoading(true);
     try {
-      // Verificar senha atual
-      const { data: found, error: findError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("email", user.email)
-        .eq("password", senhaForm.atual)
-        .maybeSingle();
+      // 1. Verifica a senha atual via re-autenticação
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: user!.email!,
+        password: senhaForm.atual,
+      });
 
-      if (findError || !found) {
+      if (verifyError) {
         setSenhaMsg({ type: "error", text: "Senha atual incorreta." });
         return;
       }
 
-      // Atualizar senha
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({ password: senhaForm.nova })
-        .eq("id", found.id);
+      // 2. Atualiza via Auth (senha hasheada automaticamente)
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: senhaForm.nova,
+      });
 
       if (updateError) {
-        setSenhaMsg({ type: "error", text: "Erro ao atualizar. Tente novamente." });
+        setSenhaMsg({ type: "error", text: "Erro ao atualizar a senha. Tente novamente." });
         return;
       }
 
@@ -105,6 +104,65 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
     } finally {
       setSenhaLoading(false);
     }
+  };
+
+  // ─── MFA: Iniciar Enrollment ──────────────────────────────────────────────
+  const handleMfaEnroll = async () => {
+    setMfaLoading(true);
+    setMfaMsg(null);
+    setMfaCode("");
+
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (error) {
+      setMfaMsg({ type: "error", text: error.message });
+      setMfaLoading(false);
+      return;
+    }
+
+    setMfaEnrollData(data);
+    setShowMfa(true);
+    setMfaLoading(false);
+  };
+
+  // ─── MFA: Confirmar código ────────────────────────────────────────────────
+  const handleMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMfaLoading(true);
+    setMfaMsg(null);
+
+    const { data: challenge, error: chError } = await supabase.auth.mfa.challenge({
+      factorId: mfaEnrollData.id,
+    });
+
+    if (chError || !challenge) {
+      setMfaMsg({ type: "error", text: "Erro ao gerar challenge. Tente novamente." });
+      setMfaLoading(false);
+      return;
+    }
+
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: mfaEnrollData.id,
+      challengeId: challenge.id,
+      code: mfaCode,
+    });
+
+    if (verifyError) {
+      setMfaMsg({ type: "error", text: "Código inválido. Verifique e tente novamente." });
+    } else {
+      setMfaMsg({ type: "success", text: "Verificação em duas etapas ativada!" });
+      setMfaFactors([{ id: mfaEnrollData.id, status: "verified" }]);
+      setTimeout(() => { setShowMfa(false); setMfaEnrollData(null); }, 1500);
+    }
+    setMfaLoading(false);
+  };
+
+  // ─── MFA: Desativar ───────────────────────────────────────────────────────
+  const handleMfaUnenroll = async () => {
+    if (!mfaFactors[0] || !window.confirm("Deseja desativar a verificação em duas etapas?")) return;
+    setMfaLoading(true);
+    const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactors[0].id });
+    if (!error) setMfaFactors([]);
+    setMfaLoading(false);
   };
 
   const tabLabels: Record<Tab, string> = {
@@ -135,7 +193,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
             {/* Avatar + Info */}
             <div className="px-6 pb-5 relative">
 
-              {/* Avatar overlapping banner */}
+              {/* Avatar */}
               <div className="relative inline-block -mt-9 mb-3">
                 <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
                   <User className="w-8 h-8 text-blue-600" />
@@ -143,7 +201,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                 <span className="absolute bottom-0.5 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
               </div>
 
-              {/* Edit button — top right */}
+              {/* Edit button */}
               <button
                 onClick={onGoToEditar}
                 className="absolute top-4 right-6 flex items-center gap-1.5 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
@@ -152,8 +210,8 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                 Editar Perfil
               </button>
 
-              {/* Name + member since */}
-              <h2 className="text-lg font-bold text-gray-900">{user?.fullName || "Usuário"}</h2>
+              {/* Name */}
+              <h2 className="text-lg font-bold text-gray-900">{profile?.fullName || "Usuário"}</h2>
               <p className="text-sm text-gray-500 mb-4">Membro desde Março/2024</p>
 
               {/* Stats */}
@@ -202,22 +260,29 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">E-mail</p>
                     <div className="flex items-center gap-2">
-                      <span className="text-gray-800">{user?.email || "—"}</span>
-                      <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                        Verificado
-                      </span>
+                      <span className="text-gray-800">{profile?.email || user?.email || "—"}</span>
+                      {/* Badge de verificação real */}
+                      {isEmailVerified ? (
+                        <span className="bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                          Verificado
+                        </span>
+                      ) : (
+                        <span className="bg-yellow-100 text-yellow-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                          Pendente
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">Telefone</p>
-                    <span className="text-gray-800">{user?.phone || "—"}</span>
+                    <span className="text-gray-800">{profile?.phone || "—"}</span>
                   </div>
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">Apartamento/Bloco</p>
                     <span className="text-gray-800">
-                      {user?.apartment && user?.block
-                        ? `Apto ${user.apartment} - Bloco ${user.block}`
-                        : user?.address || "—"}
+                      {profile?.apartment && profile?.block
+                        ? `Apto ${profile.apartment} - Bloco ${profile.block}`
+                        : profile?.address || "—"}
                     </span>
                   </div>
                 </div>
@@ -243,6 +308,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
               {/* SEGURANÇA */}
               {tab === "seguranca" && (
                 <div className="space-y-2">
+                  {/* Alterar Senha */}
                   <button
                     onClick={() => { setSenhaMsg(null); setSenhaForm({ atual: "", nova: "", confirmar: "" }); setShowSenha(true); }}
                     className="w-full flex items-center gap-3 border rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition"
@@ -250,16 +316,30 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                     <Shield className="w-5 h-5 text-gray-500" />
                     Alterar Senha
                   </button>
+
+                  {/* Notificações */}
                   <button className="w-full flex items-center gap-3 border rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition">
                     <Bell className="w-5 h-5 text-gray-500" />
                     Notificações
                   </button>
-                  <button className="w-full flex items-center justify-between gap-3 border rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition">
+
+                  {/* MFA — agora funcional */}
+                  <button
+                    onClick={isMfaActive ? handleMfaUnenroll : handleMfaEnroll}
+                    disabled={mfaLoading}
+                    className="w-full flex items-center justify-between gap-3 border rounded-xl px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-60"
+                  >
                     <div className="flex items-center gap-3">
                       <ShieldCheck className="w-5 h-5 text-gray-500" />
                       Verificação em Duas Etapas
                     </div>
-                    <span className="text-blue-600 font-semibold">Ativado</span>
+                    <span className={`font-semibold text-xs px-2 py-0.5 rounded-full ${
+                      isMfaActive
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-100 text-gray-500"
+                    }`}>
+                      {mfaLoading ? "..." : isMfaActive ? "Ativado" : "Desativado"}
+                    </span>
                   </button>
                 </div>
               )}
@@ -293,12 +373,11 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
         </div>
       </div>
 
-      {/* MODAL ALTERAR SENHA */}
+      {/* ─── MODAL ALTERAR SENHA ─────────────────────────────────────────────── */}
       {showSenha && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
 
-            {/* Header do modal */}
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Alterar Senha</h2>
               <button onClick={() => setShowSenha(false)} className="text-gray-400 hover:text-gray-600">
@@ -308,7 +387,6 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
 
             <form onSubmit={handleAlterarSenha} className="px-6 py-5 space-y-4">
 
-              {/* Feedback */}
               {senhaMsg && (
                 <div className={`p-3 rounded-xl text-sm text-center font-medium ${
                   senhaMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
@@ -381,6 +459,87 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL MFA ENROLLMENT ────────────────────────────────────────────── */}
+      {showMfa && mfaEnrollData && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold text-gray-900">Ativar Duas Etapas</h2>
+              <button onClick={() => { setShowMfa(false); setMfaEnrollData(null); }}
+                className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Escaneie o QR Code com <strong>Google Authenticator</strong>, <strong>Authy</strong> ou qualquer app TOTP:
+              </p>
+
+              {/* QR Code — Supabase retorna data URI SVG */}
+              <div className="flex justify-center">
+                <img
+                  src={mfaEnrollData.totp.qr_code}
+                  alt="QR Code para MFA"
+                  className="w-48 h-48 border rounded-xl p-2"
+                />
+              </div>
+
+              {/* Chave manual */}
+              <div className="bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-400 mb-1">Ou insira a chave manualmente:</p>
+                <code className="text-xs text-gray-700 break-all font-mono">
+                  {mfaEnrollData.totp.secret}
+                </code>
+              </div>
+
+              {mfaMsg && (
+                <div className={`p-3 rounded-xl text-sm text-center font-medium ${
+                  mfaMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+                }`}>
+                  {mfaMsg.text}
+                </div>
+              )}
+
+              {/* Campo de verificação */}
+              <form onSubmit={handleMfaVerify} className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Após escanear, insira o código de 6 dígitos gerado pelo app:
+                </p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="000000"
+                  className="w-full bg-gray-100 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                  disabled={mfaLoading}
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => { setShowMfa(false); setMfaEnrollData(null); }}
+                    className="flex-1 border rounded-xl py-2.5 text-sm text-gray-700 font-medium hover:bg-gray-50 transition"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={mfaLoading || mfaCode.length !== 6}
+                    className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-60"
+                  >
+                    {mfaLoading ? "Verificando..." : "Ativar"}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         </div>
       )}
