@@ -1,0 +1,345 @@
+import React, { useEffect, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+import {
+  ArrowLeft,
+  Home as HomeIcon,
+  Search,
+  PlusCircle,
+  MessageSquare,
+  User,
+} from "lucide-react";
+
+const supabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL!,
+  process.env.REACT_APP_SUPABASE_TOKEN!
+);
+
+interface EditarPerfilProps {
+  onGoBack: () => void;
+  onGoHome: () => void;
+}
+
+const inputClass =
+  "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
+
+export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const [form, setForm] = useState({
+    fullName: "",
+    cpf: "",
+    email: "",
+    birthDate: "",
+    phone: "",
+    gender: "",
+    bio: "",
+    apartment: "",
+    block: "",
+  });
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem("loggedUser");
+    if (savedUser) {
+      const u = JSON.parse(savedUser);
+      setForm({
+        fullName:  u.fullName  || "",
+        cpf:       u.cpf       || "",
+        email:     u.email     || "",
+        birthDate: u.birthDate || "",
+        phone:     u.phone     || "",
+        gender:    u.gender    || "",
+        bio:       u.bio       || "",
+        apartment: u.apartment || "",
+        block:     u.block     || "",
+      });
+    }
+  }, []);
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setMsg(null);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+
+    const savedUser = localStorage.getItem("loggedUser");
+    if (!savedUser) return;
+    const user = JSON.parse(savedUser);
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        fullName:  form.fullName,
+        cpf:       form.cpf,
+        email:     form.email,
+        birthDate: form.birthDate,
+        phone:     form.phone,
+        gender:    form.gender,
+        apartment: form.apartment,
+        block:     form.block,
+      })
+      .eq("id", user.id);
+
+    if (error) {
+      setMsg({ type: "error", text: "Erro ao salvar. Tente novamente." });
+    } else {
+      localStorage.setItem("loggedUser", JSON.stringify({ ...user, ...form }));
+      setMsg({ type: "success", text: "Perfil atualizado com sucesso!" });
+      setTimeout(() => onGoBack(), 1200);
+    }
+
+    setSaving(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+
+      {/* HEADER */}
+      <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
+        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
+        <span className="text-2xl font-bold text-blue-600 -ml-2">AlugApp</span>
+      </header>
+
+      <div className="flex-1 overflow-y-auto pb-24 px-4 py-6">
+        <div className="max-w-4xl mx-auto space-y-4">
+
+          {/* CARD DO PERFIL */}
+          <div className="bg-white rounded-xl overflow-hidden shadow-sm">
+
+            {/* Banner azul com botões */}
+            <div className="h-24 bg-blue-700 flex items-start justify-between px-5 py-4">
+              <button
+                type="button"
+                onClick={onGoBack}
+                className="flex items-center gap-1.5 text-white text-sm font-medium hover:text-blue-200 transition"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Voltar
+              </button>
+              <button
+                form="editar-form"
+                type="submit"
+                disabled={saving}
+                className="bg-white text-blue-700 font-semibold text-sm px-5 py-1.5 rounded-lg hover:bg-blue-50 transition disabled:opacity-60"
+              >
+                {saving ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+
+            {/* Avatar + título */}
+            <div className="px-6 pb-5">
+              <div className="relative inline-block -mt-9 mb-3">
+                <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
+                  <User className="w-8 h-8 text-blue-600" />
+                </div>
+                {/* Ícone de edição */}
+                <span className="absolute bottom-0.5 right-0 w-5 h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center">
+                  <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </span>
+              </div>
+              <p className="font-bold text-gray-900">Editar Perfil</p>
+            </div>
+          </div>
+
+          {/* FORMULÁRIO */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+
+            {msg && (
+              <div className={`mb-5 p-3 rounded-xl text-sm text-center font-medium ${
+                msg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+              }`}>
+                {msg.text}
+              </div>
+            )}
+
+            <form id="editar-form" onSubmit={handleSave} className="space-y-4">
+
+              {/* Nome Completo | CPF */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Nome Completo <span className="text-blue-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={form.fullName}
+                    onChange={handleChange}
+                    placeholder="Nome completo"
+                    className={inputClass}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    CPF <span className="text-blue-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="cpf"
+                    value={form.cpf}
+                    onChange={handleChange}
+                    placeholder="000.000.000-00"
+                    className={inputClass}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* E-mail | Data de Nascimento */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    E-mail <span className="text-blue-600">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    placeholder="E-mail"
+                    className={inputClass}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Data de Nascimento <span className="text-blue-600">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    name="birthDate"
+                    value={form.birthDate}
+                    onChange={handleChange}
+                    className={inputClass}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Telefone | Gênero */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Telefone <span className="text-blue-600">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="(00) 00000-0000"
+                    className={inputClass}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                    Gênero <span className="text-blue-600">*</span>
+                  </label>
+                  <div className="relative">
+                    <select
+                      name="gender"
+                      value={form.gender}
+                      onChange={handleChange}
+                      className={`${inputClass} appearance-none pr-10`}
+                      required
+                    >
+                      <option value="">Selecione</option>
+                      <option value="male">Masculino</option>
+                      <option value="female">Feminino</option>
+                      <option value="other">Outro</option>
+                    </select>
+                    <div className="absolute right-0 top-0 h-full w-10 bg-blue-700 rounded-r-lg flex items-center justify-center pointer-events-none">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Biografia | Apartamento + Bloco */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Biografia</label>
+                  <textarea
+                    name="bio"
+                    value={form.bio}
+                    onChange={handleChange}
+                    placeholder="Conte um pouco sobre você..."
+                    className={`${inputClass} min-h-[120px] resize-none`}
+                  />
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Apartamento <span className="text-blue-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="apartment"
+                      value={form.apartment}
+                      onChange={handleChange}
+                      placeholder="Apto XXX"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Bloco <span className="text-blue-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="block"
+                      value={form.block}
+                      onChange={handleChange}
+                      placeholder="Bloco X"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* BOTTOM NAV */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex justify-around items-center px-4 z-20">
+        <button onClick={onGoHome} className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+          <HomeIcon className="w-6 h-6" />
+          <span className="text-xs">Início</span>
+        </button>
+        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+          <Search className="w-6 h-6" />
+          <span className="text-xs">Buscar</span>
+        </button>
+        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+          <PlusCircle className="w-6 h-6" />
+          <span className="text-xs">Meus Anúncios</span>
+        </button>
+        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+          <MessageSquare className="w-6 h-6" />
+          <span className="text-xs">Chat</span>
+        </button>
+        <button onClick={onGoBack} className="flex flex-col items-center gap-0.5 text-blue-600">
+          <User className="w-6 h-6" />
+          <span className="text-xs font-medium">Perfil</span>
+        </button>
+      </nav>
+    </div>
+  );
+}
