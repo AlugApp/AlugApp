@@ -12,9 +12,13 @@ export interface UserProfile {
   cpf?: string;
   phone?: string;
   gender?: string;
-  address?: string;
-  apartment?: string;
-  block?: string;
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
   birthDate?: string;
 }
 

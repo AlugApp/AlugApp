@@ -1,14 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { IconBaseProps } from 'react-icons';
 import { FaFacebookF, FaGoogle, FaApple } from 'react-icons/fa';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 
 type MessageState = { type: 'success' | 'error'; text: string } | null;
 
 interface RegistrationFormProps {
   onGoToLogin: () => void;
 }
+
+// ─── Máscaras ─────────────────────────────────────────────────────────────────
+
+const maskCPF = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+const maskPhone = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+
+const maskCEP = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+};
+
+// ─── Lista de UFs ─────────────────────────────────────────────────────────────
+
+const UFS = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+];
+
+// ─── Componente ───────────────────────────────────────────────────────────────
 
 const inputClass =
   'w-full bg-gray-100 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
@@ -17,14 +49,17 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    rg: '',
     cpf: '',
     birthDate: '',
     phone: '',
     gender: '',
-    address: '',
-    apartment: '',
-    block: '',
+    cep: '',
+    rua: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
     password: '',
     confirmPassword: '',
   });
@@ -32,8 +67,33 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const [message, setMessage] = useState<MessageState>(null);
 
+  // ─── ViaCEP ───────────────────────────────────────────────────────────────
+  const fetchCep = useCallback(async (cepDigits: string) => {
+    if (cepDigits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setFormData((prev) => ({
+          ...prev,
+          rua: data.logradouro || prev.rua,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          estado: data.uf || prev.estado,
+        }));
+      }
+    } catch {
+      // silently ignore — user can fill manually
+    } finally {
+      setCepLoading(false);
+    }
+  }, []);
+
+  // ─── handleChange com máscaras ────────────────────────────────────────────
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -41,21 +101,22 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
     let v = value;
 
     if (name === 'cpf') {
-      v = v.replace(/\D/g, '').slice(0, 11);
-      if (v.length === 11) v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      v = maskCPF(value);
     } else if (name === 'phone') {
-      v = v.replace(/\D/g, '').slice(0, 11);
-      if (v.length === 11) v = v.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    } else if (name === 'apartment') {
-      v = v.replace(/\D/g, '').slice(0, 4);
-    } else if (name === 'block') {
-      v = v.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 1);
+      v = maskPhone(value);
+    } else if (name === 'cep') {
+      v = maskCEP(value);
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 8) fetchCep(digits);
+    } else if (name === 'numero') {
+      v = v.replace(/\D/g, '').slice(0, 6);
     }
 
     setFormData({ ...formData, [name]: v });
     setMessage(null);
   };
 
+  // ─── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -78,8 +139,22 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       return;
     }
 
+    const cpfDigits = formData.cpf.replace(/\D/g, '');
+    if (cpfDigits.length !== 11) {
+      setMessage({ type: 'error', text: 'CPF deve ter 11 dígitos.' });
+      setLoading(false);
+      return;
+    }
+
+    const cepDigits = formData.cep.replace(/\D/g, '');
+    if (cepDigits.length !== 8) {
+      setMessage({ type: 'error', text: 'CEP deve ter 8 dígitos.' });
+      setLoading(false);
+      return;
+    }
+
     try {
-      // ── 1. Cria conta no Supabase Auth (senha hasheada automaticamente) ──
+      // ── 1. Cria conta no Supabase Auth ──────────────────────────────────
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -100,7 +175,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         return;
       }
 
-      // ── 2. Insere perfil na tabela users (SEM senha) ──────────────────────
+      // ── 2. Insere perfil na tabela users ────────────────────────────────
       const { error: profileError } = await supabase.from('users').insert([{
         auth_id: authData.user.id,
         fullName: formData.fullName,
@@ -109,9 +184,13 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         birthDate: formData.birthDate,
         phone: formData.phone,
         gender: formData.gender,
-        address: formData.address,
-        apartment: formData.apartment,
-        block: formData.block,
+        cep: formData.cep,
+        rua: formData.rua,
+        numero: formData.numero,
+        complemento: formData.complemento || null,
+        bairro: formData.bairro,
+        cidade: formData.cidade,
+        estado: formData.estado,
       }]);
 
       if (profileError) {
@@ -123,14 +202,15 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         return;
       }
 
-      // ── 3. Sucesso ────────────────────────────────────────────────────────
+      // ── 3. Sucesso ──────────────────────────────────────────────────────
       setMessage({
         type: 'success',
         text: `Conta criada! Enviamos um e-mail de confirmação para ${formData.email}. Verifique sua caixa de entrada antes de fazer login.`,
       });
       setFormData({
-        fullName: '', email: '', rg: '', cpf: '', birthDate: '',
-        phone: '', gender: '', address: '', apartment: '', block: '',
+        fullName: '', email: '', cpf: '', birthDate: '',
+        phone: '', gender: '', cep: '', rua: '', numero: '',
+        complemento: '', bairro: '', cidade: '', estado: '',
         password: '', confirmPassword: '',
       });
       setTimeout(() => onGoToLogin(), 5000);
@@ -214,8 +294,8 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
               disabled={loading}
             />
 
-            {/* E-mail | RG | CPF */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* E-mail | CPF */}
+            <div className="grid grid-cols-2 gap-3">
               <input
                 type="email"
                 name="email"
@@ -228,20 +308,10 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
               />
               <input
                 type="text"
-                name="rg"
-                value={formData.rg}
-                onChange={handleChange}
-                placeholder="RG*"
-                className={inputClass}
-                required
-                disabled={loading}
-              />
-              <input
-                type="text"
                 name="cpf"
                 value={formData.cpf}
                 onChange={handleChange}
-                placeholder="CPF*"
+                placeholder="000.000.000-00*"
                 className={inputClass}
                 required
                 disabled={loading}
@@ -264,7 +334,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                placeholder="Telefone*"
+                placeholder="(00) 00000-0000*"
                 className={inputClass}
                 required
                 disabled={loading}
@@ -292,50 +362,105 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
               </div>
             </div>
 
-            {/* Residencial | Apto | Bloco */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="relative col-span-2">
-                <select
-                  name="address"
-                  value={formData.address}
+            {/* ── ENDEREÇO ──────────────────────────────────────────────── */}
+            <div className="border-t border-gray-200 pt-3 mt-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Endereço</p>
+
+              {/* CEP | Rua */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="relative">
+                  <input
+                    type="text"
+                    name="cep"
+                    value={formData.cep}
+                    onChange={handleChange}
+                    placeholder="00000-000*"
+                    className={inputClass}
+                    required
+                    disabled={loading}
+                  />
+                  {cepLoading && (
+                    <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                  )}
+                </div>
+                <input
+                  type="text"
+                  name="rua"
+                  value={formData.rua}
                   onChange={handleChange}
-                  className={`${inputClass} appearance-none pr-10`}
+                  placeholder="Rua / Logradouro*"
+                  className={`${inputClass} col-span-2`}
                   required
                   disabled={loading}
-                >
-                  <option value="">Residencial*</option>
-                  <option value="Bloco A">Bloco A</option>
-                  <option value="Bloco B">Bloco B</option>
-                  <option value="Bloco C">Bloco C</option>
-                  <option value="Bloco D">Bloco D</option>
-                  <option value="Outro">Outro</option>
-                </select>
-                <div className="absolute right-0 top-0 h-full w-10 bg-blue-700 rounded-r-xl flex items-center justify-center pointer-events-none">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
+                />
+              </div>
+
+              {/* Número | Complemento | Bairro */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <input
+                  type="text"
+                  name="numero"
+                  value={formData.numero}
+                  onChange={handleChange}
+                  placeholder="Número*"
+                  className={inputClass}
+                  required
+                  disabled={loading}
+                />
+                <input
+                  type="text"
+                  name="complemento"
+                  value={formData.complemento}
+                  onChange={handleChange}
+                  placeholder="Complemento"
+                  className={inputClass}
+                  disabled={loading}
+                />
+                <input
+                  type="text"
+                  name="bairro"
+                  value={formData.bairro}
+                  onChange={handleChange}
+                  placeholder="Bairro*"
+                  className={inputClass}
+                  required
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Cidade | Estado */}
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  name="cidade"
+                  value={formData.cidade}
+                  onChange={handleChange}
+                  placeholder="Cidade*"
+                  className={inputClass}
+                  required
+                  disabled={loading}
+                />
+                <div className="relative">
+                  <select
+                    name="estado"
+                    value={formData.estado}
+                    onChange={handleChange}
+                    className={`${inputClass} appearance-none pr-10`}
+                    required
+                    disabled={loading}
+                  >
+                    <option value="">Estado*</option>
+                    {UFS.map((uf) => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-0 top-0 h-full w-10 bg-blue-700 rounded-r-xl flex items-center justify-center pointer-events-none">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
-              <input
-                type="text"
-                name="apartment"
-                value={formData.apartment}
-                onChange={handleChange}
-                placeholder="Apto*"
-                className={inputClass}
-                required
-                disabled={loading}
-              />
-              <input
-                type="text"
-                name="block"
-                value={formData.block}
-                onChange={handleChange}
-                placeholder="Bloco*"
-                className={inputClass}
-                required
-                disabled={loading}
-              />
             </div>
 
             {/* Senha */}

@@ -5,7 +5,7 @@ import {
   Star, Edit2, Package, HelpCircle, LogOut,
   ShieldCheck, Bell, Shield, CreditCard,
   Home as HomeIcon, Search, PlusCircle, MessageSquare, User,
-  Eye, EyeOff, X, QrCode,
+  Eye, EyeOff, X,
 } from "lucide-react";
 
 type Tab = "informacoes" | "seguranca" | "pagamentos";
@@ -39,10 +39,19 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
   const [mfaMsg, setMfaMsg] = useState<MessageState>(null);
 
   // Carrega fatores MFA quando entra na aba Segurança
+  // Também limpa fatores "unverified" que ficaram pendentes de tentativas anteriores
   useEffect(() => {
     if (tab === "seguranca") {
-      supabase.auth.mfa.listFactors().then(({ data }) => {
-        const verified = data?.totp?.filter((f: any) => f.status === "verified") ?? [];
+      supabase.auth.mfa.listFactors().then(async ({ data }: any) => {
+        const all = data?.totp ?? [];
+        const verified = all.filter((f: any) => f.status === "verified");
+        const unverified = all.filter((f: any) => f.status === "unverified");
+
+        // Limpa fatores pendentes de tentativas anteriores
+        for (const f of unverified) {
+          await supabase.auth.mfa.unenroll({ factorId: f.id });
+        }
+
         setMfaFactors(verified);
       });
     }
@@ -106,11 +115,30 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
     }
   };
 
+  // ─── MFA: Cancelar enrollment pendente ────────────────────────────────────
+  const cancelMfaEnroll = async () => {
+    // Remove o fator não verificado para que o usuário possa tentar novamente
+    if (mfaEnrollData?.id) {
+      await supabase.auth.mfa.unenroll({ factorId: mfaEnrollData.id });
+    }
+    setShowMfa(false);
+    setMfaEnrollData(null);
+    setMfaCode("");
+    setMfaMsg(null);
+  };
+
   // ─── MFA: Iniciar Enrollment ──────────────────────────────────────────────
   const handleMfaEnroll = async () => {
     setMfaLoading(true);
     setMfaMsg(null);
     setMfaCode("");
+
+    // Limpa qualquer fator pendente antes de criar um novo
+    const { data: existing } = await supabase.auth.mfa.listFactors();
+    const unverified = existing?.totp?.filter((f: any) => f.status === "unverified") ?? [];
+    for (const f of unverified) {
+      await supabase.auth.mfa.unenroll({ factorId: f.id });
+    }
 
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
     if (error) {
@@ -278,11 +306,11 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                     <span className="text-gray-800">{profile?.phone || "—"}</span>
                   </div>
                   <div>
-                    <p className="text-gray-400 text-xs mb-0.5">Apartamento/Bloco</p>
+                    <p className="text-gray-400 text-xs mb-0.5">Endereço</p>
                     <span className="text-gray-800">
-                      {profile?.apartment && profile?.block
-                        ? `Apto ${profile.apartment} - Bloco ${profile.block}`
-                        : profile?.address || "—"}
+                      {profile?.rua
+                        ? `${profile.rua}${profile.numero ? `, ${profile.numero}` : ''}${profile.complemento ? ` - ${profile.complemento}` : ''}${profile.bairro ? `, ${profile.bairro}` : ''}${profile.cidade ? `, ${profile.cidade}` : ''}${profile.estado ? `/${profile.estado}` : ''}${profile.cep ? ` - CEP: ${profile.cep}` : ''}`
+                        : "—"}
                     </span>
                   </div>
                 </div>
@@ -470,7 +498,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
 
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-bold text-gray-900">Ativar Duas Etapas</h2>
-              <button onClick={() => { setShowMfa(false); setMfaEnrollData(null); }}
+              <button onClick={cancelMfaEnroll}
                 className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
@@ -525,7 +553,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => { setShowMfa(false); setMfaEnrollData(null); }}
+                    onClick={cancelMfaEnroll}
                     className="flex-1 border rounded-xl py-2.5 text-sm text-gray-700 font-medium hover:bg-gray-50 transition"
                   >
                     Cancelar
