@@ -121,7 +121,7 @@ src/
 
 ## Autores
 
-Desenvolvido por estudantes do curso de Engenharia de Software do CEUB:
+Desenvolvido por estudantes do curso de Ciência da Computação do CEUB:
 
 - **Cauã Paniagua**
 - **Lucas Carmona**
