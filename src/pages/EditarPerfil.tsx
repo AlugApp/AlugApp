@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import React, { useEffect, useState, useCallback } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import {
   ArrowLeft,
   Home as HomeIcon,
@@ -7,23 +8,51 @@ import {
   PlusCircle,
   MessageSquare,
   User,
+  Loader2,
 } from "lucide-react";
-
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 interface EditarPerfilProps {
   onGoBack: () => void;
   onGoHome: () => void;
 }
 
+// ─── Máscaras ─────────────────────────────────────────────────────────────────
+
+const maskCPF = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  return d
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+const maskPhone = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2) return d;
+  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+
+const maskCEP = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 5) return d;
+  return `${d.slice(0, 5)}-${d.slice(5)}`;
+};
+
+// ─── Lista de UFs ─────────────────────────────────────────────────────────────
+
+const UFS = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+];
+
 const inputClass =
   "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
 export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) {
+  const { user, profile, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const [form, setForm] = useState({
@@ -34,25 +63,59 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
     phone: "",
     gender: "",
     bio: "",
-    apartment: "",
-    block: "",
+    cep: "",
+    rua: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
   });
 
+  // Carrega dados do perfil via AuthContext
   useEffect(() => {
-    const savedUser = localStorage.getItem("loggedUser");
-    if (savedUser) {
-      const u = JSON.parse(savedUser);
+    if (profile) {
       setForm({
-        fullName:  u.fullName  || "",
-        cpf:       u.cpf       || "",
-        email:     u.email     || "",
-        birthDate: u.birthDate || "",
-        phone:     u.phone     || "",
-        gender:    u.gender    || "",
-        bio:       u.bio       || "",
-        apartment: u.apartment || "",
-        block:     u.block     || "",
+        fullName: profile.fullName || "",
+        cpf: profile.cpf || "",
+        email: profile.email || "",
+        birthDate: profile.birthDate || "",
+        phone: profile.phone || "",
+        gender: profile.gender || "",
+        bio: (profile as any).bio || "",
+        cep: profile.cep || "",
+        rua: profile.rua || "",
+        numero: profile.numero || "",
+        complemento: profile.complemento || "",
+        bairro: profile.bairro || "",
+        cidade: profile.cidade || "",
+        estado: profile.estado || "",
       });
+    } else if (user) {
+      setForm((prev) => ({ ...prev, email: user.email || "" }));
+    }
+  }, [profile, user]);
+
+  // ─── ViaCEP ─────────────────────────────────────────────────────────────
+  const fetchCep = useCallback(async (cepDigits: string) => {
+    if (cepDigits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepDigits}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setForm((prev) => ({
+          ...prev,
+          rua: data.logradouro || prev.rua,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          estado: data.uf || prev.estado,
+        }));
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setCepLoading(false);
     }
   }, []);
 
@@ -60,7 +123,21 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    let v = value;
+
+    if (name === 'cpf') {
+      v = maskCPF(value);
+    } else if (name === 'phone') {
+      v = maskPhone(value);
+    } else if (name === 'cep') {
+      v = maskCEP(value);
+      const digits = value.replace(/\D/g, '');
+      if (digits.length === 8) fetchCep(digits);
+    } else if (name === 'numero') {
+      v = v.replace(/\D/g, '').slice(0, 6);
+    }
+
+    setForm((prev) => ({ ...prev, [name]: v }));
     setMsg(null);
   };
 
@@ -69,28 +146,38 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
     setSaving(true);
     setMsg(null);
 
-    const savedUser = localStorage.getItem("loggedUser");
-    if (!savedUser) return;
-    const user = JSON.parse(savedUser);
+    if (!user) {
+      setMsg({ type: "error", text: "Sessão expirada. Faça login novamente." });
+      setSaving(false);
+      return;
+    }
 
     const { error } = await supabase
       .from("users")
       .update({
-        fullName:  form.fullName,
-        cpf:       form.cpf,
-        email:     form.email,
+        fullName: form.fullName,
+        cpf: form.cpf,
+        email: form.email,
         birthDate: form.birthDate,
-        phone:     form.phone,
-        gender:    form.gender,
-        apartment: form.apartment,
-        block:     form.block,
+        phone: form.phone,
+        gender: form.gender,
+        cep: form.cep,
+        rua: form.rua,
+        numero: form.numero,
+        complemento: form.complemento || null,
+        bairro: form.bairro,
+        cidade: form.cidade,
+        estado: form.estado,
       })
-      .eq("id", user.id);
+      .eq("auth_id", user.id);
 
     if (error) {
       setMsg({ type: "error", text: "Erro ao salvar. Tente novamente." });
     } else {
-      localStorage.setItem("loggedUser", JSON.stringify({ ...user, ...form }));
+      if (form.email !== user.email) {
+        await supabase.auth.updateUser({ email: form.email });
+      }
+      await refreshProfile();
       setMsg({ type: "success", text: "Perfil atualizado com sucesso!" });
       setTimeout(() => onGoBack(), 1200);
     }
@@ -139,7 +226,6 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
                 <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
                   <User className="w-8 h-8 text-blue-600" />
                 </div>
-                {/* Ícone de edição */}
                 <span className="absolute bottom-0.5 right-0 w-5 h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center">
                   <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
@@ -268,48 +354,143 @@ export default function EditarPerfil({ onGoBack, onGoHome }: EditarPerfilProps) 
                 </div>
               </div>
 
-              {/* Biografia | Apartamento + Bloco */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Biografia</label>
-                  <textarea
-                    name="bio"
-                    value={form.bio}
-                    onChange={handleChange}
-                    placeholder="Conte um pouco sobre você..."
-                    className={`${inputClass} min-h-[120px] resize-none`}
-                  />
-                </div>
-                <div className="space-y-4">
+              {/* ── ENDEREÇO ──────────────────────────────────────────── */}
+              <div className="border-t border-gray-200 pt-4 mt-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Endereço</p>
+
+                {/* CEP | Rua */}
+                <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Apartamento <span className="text-blue-600">*</span>
+                      CEP <span className="text-blue-600">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        name="cep"
+                        value={form.cep}
+                        onChange={handleChange}
+                        placeholder="00000-000"
+                        className={inputClass}
+                        required
+                      />
+                      {cepLoading && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 animate-spin" />
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Rua / Logradouro <span className="text-blue-600">*</span>
                     </label>
                     <input
                       type="text"
-                      name="apartment"
-                      value={form.apartment}
+                      name="rua"
+                      value={form.rua}
                       onChange={handleChange}
-                      placeholder="Apto XXX"
+                      placeholder="Rua / Logradouro"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Número | Complemento | Bairro */}
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Número <span className="text-blue-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="numero"
+                      value={form.numero}
+                      onChange={handleChange}
+                      placeholder="Nº"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">Complemento</label>
+                    <input
+                      type="text"
+                      name="complemento"
+                      value={form.complemento}
+                      onChange={handleChange}
+                      placeholder="Apto, Bloco..."
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Bairro <span className="text-blue-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="bairro"
+                      value={form.bairro}
+                      onChange={handleChange}
+                      placeholder="Bairro"
+                      className={inputClass}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Cidade | Estado */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 mb-1 block">
+                      Cidade <span className="text-blue-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="cidade"
+                      value={form.cidade}
+                      onChange={handleChange}
+                      placeholder="Cidade"
                       className={inputClass}
                       required
                     />
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Bloco <span className="text-blue-600">*</span>
+                      Estado <span className="text-blue-600">*</span>
                     </label>
-                    <input
-                      type="text"
-                      name="block"
-                      value={form.block}
-                      onChange={handleChange}
-                      placeholder="Bloco X"
-                      className={inputClass}
-                      required
-                    />
+                    <div className="relative">
+                      <select
+                        name="estado"
+                        value={form.estado}
+                        onChange={handleChange}
+                        className={`${inputClass} appearance-none pr-10`}
+                        required
+                      >
+                        <option value="">UF</option>
+                        {UFS.map((uf) => (
+                          <option key={uf} value={uf}>{uf}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-0 top-0 h-full w-10 bg-blue-700 rounded-r-lg flex items-center justify-center pointer-events-none">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Biografia */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-1 block">Biografia</label>
+                <textarea
+                  name="bio"
+                  value={form.bio}
+                  onChange={handleChange}
+                  placeholder="Conte um pouco sobre você..."
+                  className={`${inputClass} min-h-[100px] resize-none`}
+                />
               </div>
 
             </form>

@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabaseClient";
 import {
   Wrench, Laptop, Dumbbell, Package,
   Search, SlidersHorizontal, X,
   Home as HomeIcon, MessageSquare, User, PlusCircle, CirclePlus,
 } from "lucide-react";
 
-const supabase = createClient(
-  process.env.REACT_APP_SUPABASE_URL!,
-  process.env.REACT_APP_SUPABASE_TOKEN!
-);
 
 interface HomeProps {
   onGoToAnnounce: () => void;
