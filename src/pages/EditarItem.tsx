@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { Upload, DollarSign, MapPin, FileText } from "lucide-react";
-
+import { Upload, DollarSign, MapPin, Save, ArrowLeft, Loader2 } from "lucide-react";
 
 interface Categoria {
   idcategoria: number;
   nome_categoria: string;
 }
 
-interface AnunciarItemProps {
+interface EditarItemProps {
+  id: number;
   onGoBack: () => void;
 }
 
-export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
-  const { user, profile } = useAuth();
+export default function EditarItem({ id, onGoBack }: EditarItemProps) {
+  const { user } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -26,20 +28,58 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     localizacao: "",
     contato: "",
     foto_preview: "",
-    foto_file: null as File | null
+    foto_file: null as File | null,
+    existing_foto_id: null as number | null,
   });
 
-  // 🔥 Carregar categorias do Supabase
-  const loadCategorias = async () => {
-    const { data, error } = await supabase.from("categoria").select("*");
-    if (!error && data) setCategorias(data);
+  useEffect(() => {
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const loadInitialData = async () => {
+    setLoading(true);
+    
+    // Carregar categorias
+    const { data: cats } = await supabase.from("categoria").select("*");
+    if (cats) setCategorias(cats);
+
+    // Carregar dados do item
+    const { data: item, error } = await supabase
+      .from("item")
+      .select("*")
+      .eq("iditem", id)
+      .single();
+
+    if (error || !item) {
+      alert("Erro ao carregar dados do item.");
+      onGoBack();
+      return;
+    }
+
+    // Carregar foto atual
+    const { data: foto } = await supabase
+      .from("fotoitem")
+      .select("*")
+      .eq("iditem", id)
+      .order("ordem_exibicao")
+      .maybeSingle();
+
+    setFormData({
+      nome: item.nome,
+      descricao: item.descricao,
+      idcategoria: String(item.idcategoria),
+      valor_aluguel_diario: String(item.valor_aluguel_diario),
+      localizacao: item.localizacao || "",
+      contato: item.contato || "",
+      foto_preview: foto?.url_foto || "",
+      foto_file: null,
+      existing_foto_id: foto?.idfotoitem || null,
+    });
+
+    setLoading(false);
   };
 
-  useEffect(() => {
-    loadCategorias();
-  }, []);
-
-  // 📌 Atualizar campos
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -47,7 +87,6 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // 📸 Upload da imagem
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -59,71 +98,90 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     }));
   };
 
-  // 🚀 Enviar item ao Supabase
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
 
-    // 1️⃣ Criar item
-    const { data: itemCreated, error } = await supabase
+    if (!user) return;
+
+    // 1️⃣ Atualizar item
+    const { data, error: updateError } = await supabase
       .from("item")
-      .insert([
-        {
-          nome: formData.nome,
-          descricao: formData.descricao,
-          idcategoria: Number(formData.idcategoria),
-          valor_aluguel_diario: Number(formData.valor_aluguel_diario),
-          idlocador: user?.id,
-        },
-      ])
-      .select()
-      .single();
+      .update({
+        nome: formData.nome,
+        descricao: formData.descricao,
+        idcategoria: Number(formData.idcategoria),
+        valor_aluguel_diario: Number(formData.valor_aluguel_diario),
+      })
+      .eq("iditem", id)
+      .eq("idlocador", user.id)
+      .select();
 
-    if (error) {
-      console.error("Erro ao criar item:", error);
-      alert("Erro ao criar item.");
+    if (updateError) {
+      console.error("Erro ao atualizar item:", updateError);
+      alert("Erro ao atualizar item: " + updateError.message);
+      setSaving(false);
       return;
     }
 
-    // 2️⃣ Enviar foto ao Storage
-    let fotoUrl = null;
+    if (!data || data.length === 0) {
+      alert("Erro: Você não tem permissão para editar este item.");
+      setSaving(false);
+      return;
+    }
 
+    // 2️⃣ Se houver nova foto, enviar ao Storage
     if (formData.foto_file) {
       setUploading(true);
-
-      const fileName = `${itemCreated.iditem}-${Date.now()}`;
+      const fileName = `${id}-${Date.now()}`;
       const { error: uploadError } = await supabase.storage
         .from("items")
         .upload(fileName, formData.foto_file);
 
       if (!uploadError) {
-        fotoUrl = `https://${process.env.REACT_APP_SUPABASE_URL!.replace(
+        const fotoUrl = `https://${process.env.REACT_APP_SUPABASE_URL!.replace(
           "https://",
           ""
         )}/storage/v1/object/public/items/${fileName}`;
 
-        // 3️⃣ Criar registro na tabela fotoitem
-        await supabase.from("fotoitem").insert([
-          {
-            iditem: itemCreated.iditem,
-            url_foto: fotoUrl,
-            ordem_exibicao: 1,
-          },
-        ]);
+        // Atualizar ou inserir na tabela fotoitem
+        if (formData.existing_foto_id) {
+          await supabase
+            .from("fotoitem")
+            .update({ url_foto: fotoUrl })
+            .eq("idfotoitem", formData.existing_foto_id);
+        } else {
+          await supabase.from("fotoitem").insert([
+            { iditem: id, url_foto: fotoUrl, ordem_exibicao: 1 },
+          ]);
+        }
       }
-
       setUploading(false);
     }
 
-    alert("Anúncio criado com sucesso!");
+    setSaving(false);
+    alert("Anúncio atualizado com sucesso!");
     onGoBack();
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-6">
+        
+        <button onClick={onGoBack} className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 transition">
+          <ArrowLeft className="w-5 h-5" />
+          Voltar para meus anúncios
+        </button>
 
-        {/* TÍTULO */}
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Criar Anúncio</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-6">Editar Anúncio</h1>
 
         <form onSubmit={handleSubmit}>
           <div className="bg-white rounded-xl p-6 shadow-sm border space-y-6">
@@ -136,7 +194,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                 name="nome"
                 value={formData.nome}
                 onChange={handleChange}
-                placeholder="Ex: Furadeira elétrica"
+                required
                 className="w-full h-12 border rounded-lg px-3 mt-1"
               />
             </div>
@@ -148,20 +206,20 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                 name="descricao"
                 value={formData.descricao}
                 onChange={handleChange}
-                placeholder="Descreva o item..."
+                required
                 className="w-full min-h-28 border rounded-lg px-3 mt-1"
               />
             </div>
 
             {/* CATEGORIA E VALOR */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
               <div>
                 <label className="font-semibold text-gray-900">Categoria *</label>
                 <select
                   name="idcategoria"
                   value={formData.idcategoria}
                   onChange={handleChange}
+                  required
                   className="w-full h-12 border rounded-lg px-3 mt-1"
                 >
                   <option value="">Selecione</option>
@@ -182,52 +240,22 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                     name="valor_aluguel_diario"
                     value={formData.valor_aluguel_diario}
                     onChange={handleChange}
-                    placeholder="0,00"
+                    required
                     className="w-full h-12 border rounded-lg pl-10 mt-1"
                   />
                 </div>
               </div>
             </div>
 
-            {/* LOCALIZAÇÃO */}
-            <div>
-              <label className="font-semibold text-gray-900">Localização</label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 text-gray-400" />
-                <input
-                  type="text"
-                  name="localizacao"
-                  value={formData.localizacao}
-                  onChange={handleChange}
-                  placeholder="Ex: Bloco A - 302"
-                  className="w-full h-12 border rounded-lg pl-10 mt-1"
-                />
-              </div>
-            </div>
-
-            {/* CONTATO */}
-            <div>
-              <label className="font-semibold text-gray-900">Contato</label>
-              <input
-                type="text"
-                name="contato"
-                value={formData.contato}
-                onChange={handleChange}
-                placeholder="(11) 99999-9999"
-                className="w-full h-12 border rounded-lg px-3 mt-1"
-              />
-            </div>
-
             {/* FOTO */}
             <div>
               <label className="font-semibold text-gray-900">Foto do item</label>
-
               <label className="border-2 border-dashed rounded-xl h-40 flex items-center justify-center cursor-pointer bg-gray-50 hover:bg-gray-100 mt-2">
                 <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
                 {!formData.foto_preview ? (
                   <div className="text-center text-gray-500">
                     <Upload className="mx-auto mb-2" />
-                    Clique para enviar uma foto
+                    Alterar foto
                   </div>
                 ) : (
                   <img
@@ -237,8 +265,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                   />
                 )}
               </label>
-
-              {uploading && <p className="text-blue-600 mt-1">Enviando...</p>}
+              {uploading && <p className="text-blue-600 mt-1">Enviando nova foto...</p>}
             </div>
 
             {/* BOTÕES */}
@@ -246,20 +273,24 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               <button
                 type="button"
                 onClick={onGoBack}
-                className="w-1/2 h-12 border rounded-lg text-gray-700"
+                className="w-1/2 h-12 border rounded-lg text-gray-700 hover:bg-gray-50 transition"
               >
                 Cancelar
               </button>
 
               <button
                 type="submit"
-                className="w-1/2 h-12 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+                disabled={saving}
+                className="w-1/2 h-12 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                <FileText className="inline mr-2" />
-                Publicar Anúncio
+                {saving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Save className="w-5 h-5" />
+                )}
+                Salvar Alterações
               </button>
             </div>
-
           </div>
         </form>
       </div>

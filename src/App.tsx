@@ -8,10 +8,15 @@ import AnunciarItem from './pages/CadastrarItem';
 import ItemDetalhes from './pages/DetalhesItem';
 import Perfil from './pages/Perfil';
 import EditarPerfil from './pages/EditarPerfil';
+import RecuperarSenha from './pages/RecuperarSenha';
+import RedefinirSenha from './pages/RedefinirSenha';
+import MeusAnuncios from './pages/MeusAnuncios';
+import EditarItem from './pages/EditarItem';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil';
+type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item';
+type AuthMode = 'login' | 'register' | 'forgot-password' | 'update-password';
 
 // ─── Tela de verificação MFA (AAL2) ──────────────────────────────────────────
 
@@ -84,8 +89,8 @@ const MfaChallenge: React.FC<{
 // ─── Conteúdo principal ───────────────────────────────────────────────────────
 
 const AppContent: React.FC = () => {
-  const { session, loading } = useAuth();
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const { session, loading, signOut } = useAuth();
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [mode, setMode] = useState<AppMode>('home');
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
@@ -93,6 +98,16 @@ const AppContent: React.FC = () => {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null);
+
+  // Escuta eventos de Auth para detectar recuperação de senha
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthMode('update-password');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Verifica se MFA (AAL2) é necessário após sessão ser criada
   useEffect(() => {
@@ -132,13 +147,23 @@ const AppContent: React.FC = () => {
   }
 
   // ── Não autenticado ──
-  if (!session) {
+  if (!session || authMode === 'update-password') {
     if (authMode === 'register') {
       return <Cadastro onGoToLogin={() => setAuthMode('login')} />;
+    }
+    if (authMode === 'forgot-password') {
+      return <RecuperarSenha onGoBack={() => setAuthMode('login')} />;
+    }
+    if (authMode === 'update-password') {
+      return <RedefinirSenha onSuccess={async () => {
+        await signOut();
+        setAuthMode('login');
+      }} />;
     }
     return (
       <Login
         onGoToRegister={() => setAuthMode('register')}
+        onForgotPassword={() => setAuthMode('forgot-password')}
         onLoginSuccess={() => {}}
       />
     );
@@ -155,6 +180,7 @@ const AppContent: React.FC = () => {
     );
   }
 
+
   // ── Autenticado — roteamento de telas ──
   if (mode === 'details' && selectedItemId !== null) {
     return <ItemDetalhes id={selectedItemId} onGoBack={() => setMode('home')} />;
@@ -168,17 +194,39 @@ const AppContent: React.FC = () => {
         onGoBack={() => setMode('home')}
         onLogout={() => setMode('home')}
         onGoToEditar={() => setMode('editar-perfil')}
+        onGoToMyAnnouncements={() => setMode('my-announcements')}
       />
     );
   }
   if (mode === 'editar-perfil') {
-    return <EditarPerfil onGoBack={() => setMode('perfil')} onGoHome={() => setMode('home')} />;
+    return (
+      <EditarPerfil
+        onGoBack={() => setMode('perfil')}
+        onGoHome={() => setMode('home')}
+        onGoToMyAnnouncements={() => setMode('my-announcements')}
+      />
+    );
+  }
+  if (mode === 'my-announcements') {
+    return (
+      <MeusAnuncios
+        onGoBack={() => setMode('home')}
+        onGoToPerfil={() => setMode('perfil')}
+        onGoToAnnounce={() => setMode('announce')}
+        onOpenItem={(id) => { setSelectedItemId(id); setMode('details'); }}
+        onEditItem={(id) => { setSelectedItemId(id); setMode('edit-item'); }}
+      />
+    );
+  }
+  if (mode === 'edit-item' && selectedItemId !== null) {
+    return <EditarItem id={selectedItemId} onGoBack={() => setMode('my-announcements')} />;
   }
 
   return (
     <Home
       onGoToAnnounce={() => setMode('announce')}
       onGoToPerfil={() => setMode('perfil')}
+      onGoToMyAnnouncements={() => setMode('my-announcements')}
       onOpenItem={(id) => { setSelectedItemId(id); setMode('details'); }}
     />
   );

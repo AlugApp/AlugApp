@@ -8,10 +8,11 @@ type MessageState = { type: 'success' | 'error'; text: string } | null;
 
 interface LoginFormProps {
   onGoToRegister: () => void;
+  onForgotPassword: () => void;
   onLoginSuccess: () => void; // mantido por compatibilidade; o AuthContext gerencia o redirect
 }
 
-const Login: React.FC<LoginFormProps> = ({ onGoToRegister }) => {
+const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
@@ -146,11 +147,12 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister }) => {
                 <button
                   type="button"
                   className="text-blue-600 hover:underline"
-                  onClick={() => alert('Recuperação de senha não implementada.')}
+                  onClick={onForgotPassword}
                 >
                   Esqueceu a senha?
                 </button>
               </div>
+
 
               {/* Botão entrar */}
               <button

@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import {
   Star, Edit2, Package, HelpCircle, LogOut,
   ShieldCheck, Bell, Shield, CreditCard,
-  Home as HomeIcon, Search, PlusCircle, MessageSquare, User,
+  Home as HomeIcon, PlusCircle, MessageSquare, User,
   Eye, EyeOff, X,
 } from "lucide-react";
 
@@ -15,9 +15,10 @@ interface PerfilProps {
   onGoBack: () => void;
   onLogout: () => void;
   onGoToEditar: () => void;
+  onGoToMyAnnouncements: () => void;
 }
 
-export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps) {
+export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnouncements }: PerfilProps) {
   const { user, profile, signOut } = useAuth();
   const [tab, setTab] = useState<Tab>("informacoes");
 
@@ -578,11 +579,10 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar }: PerfilProps
           <HomeIcon className="w-6 h-6" />
           <span className="text-xs">Início</span>
         </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <Search className="w-6 h-6" />
-          <span className="text-xs">Buscar</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+        <button
+          onClick={onGoToMyAnnouncements}
+          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
+        >
           <PlusCircle className="w-6 h-6" />
           <span className="text-xs">Meus Anúncios</span>
         </button>

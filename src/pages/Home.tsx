@@ -10,6 +10,7 @@ import {
 interface HomeProps {
   onGoToAnnounce: () => void;
   onGoToPerfil: () => void;
+  onGoToMyAnnouncements: () => void;
   onOpenItem: (id: number) => void;
 }
 
@@ -51,7 +52,7 @@ const categories = [
   { id: "4", label: "Outros", icon: Package },
 ];
 
-export default function Home({ onGoToAnnounce, onGoToPerfil, onOpenItem }: HomeProps) {
+export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem }: HomeProps) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -346,11 +347,10 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onOpenItem }: HomeP
           <HomeIcon className="w-6 h-6" />
           <span className="text-xs font-medium">Início</span>
         </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <Search className="w-6 h-6" />
-          <span className="text-xs">Buscar</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
+        <button
+          onClick={onGoToMyAnnouncements}
+          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
+        >
           <PlusCircle className="w-6 h-6" />
           <span className="text-xs">Meus Anúncios</span>
         </button>
