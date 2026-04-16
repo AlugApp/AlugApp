@@ -64,6 +64,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
     confirmPassword: '',
   });
 
+  const [birthDateFocused, setBirthDateFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -311,7 +312,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 name="cpf"
                 value={formData.cpf}
                 onChange={handleChange}
-                placeholder="000.000.000-00*"
+                placeholder="CPF*"
                 className={inputClass}
                 required
                 disabled={loading}
@@ -320,21 +321,30 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
             {/* Data | Telefone | Gênero */}
             <div className="grid grid-cols-3 gap-3">
-              <input
-                type="date"
-                name="birthDate"
-                value={formData.birthDate}
-                onChange={handleChange}
-                className={inputClass}
-                required
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  type="date"
+                  name="birthDate"
+                  value={formData.birthDate}
+                  onChange={handleChange}
+                  className={`${inputClass} h-11 [&::-webkit-date-and-time-value]:text-left ${!formData.birthDate && !birthDateFocused ? '[&::-webkit-datetime-edit]:opacity-0' : ''}`}
+                  required
+                  disabled={loading}
+                  onFocus={() => setBirthDateFocused(true)}
+                  onBlur={() => setBirthDateFocused(false)}
+                />
+                {!formData.birthDate && !birthDateFocused && (
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+                    Data de Nascimento*
+                  </span>
+                )}
+              </div>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
-                placeholder="(00) 00000-0000*"
+                placeholder="Telefone*"
                 className={inputClass}
                 required
                 disabled={loading}
@@ -374,7 +384,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                     name="cep"
                     value={formData.cep}
                     onChange={handleChange}
-                    placeholder="00000-000*"
+                    placeholder="CEP*"
                     className={inputClass}
                     required
                     disabled={loading}

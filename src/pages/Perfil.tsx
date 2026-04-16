@@ -58,8 +58,52 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
     }
   }, [tab]);
 
+  // ─── Stats dinâmicos ──────────────────────────────────────────────────────
+  const [itemCount, setItemCount] = useState<number | null>(null);
+  const [aluguelCount, setAluguelCount] = useState<number | null>(null);
+  const [avaliacaoMedia, setAvaliacaoMedia] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user?.id || !profile?.id) return;
+
+    // Itens: idlocador é UUID do auth
+    supabase
+      .from("item")
+      .select("iditem", { count: "exact", head: true })
+      .eq("idlocador", user.id)
+      .then(({ count }) => setItemCount(count ?? 0));
+
+    // Aluguéis: idlocatario é bigint do users
+    supabase
+      .from("solicitacao_aluguel")
+      .select("idsolicitacao", { count: "exact", head: true })
+      .eq("idlocatario", profile.id)
+      .then(({ count }) => setAluguelCount(count ?? 0));
+
+    // Avaliação média: idavaliado é bigint do users, nota de 1-10
+    supabase
+      .from("avaliacao")
+      .select("nota")
+      .eq("idavaliado", profile.id)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          const avg = data.reduce((s, r) => s + r.nota, 0) / data.length;
+          setAvaliacaoMedia(Math.round(avg * 10) / 10);
+        } else {
+          setAvaliacaoMedia(null);
+        }
+      });
+  }, [user?.id, profile?.id]);
+
+  // ─── Membro desde ─────────────────────────────────────────────────────────
+  const membroDesde = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
+    : null;
+
   const isMfaActive = mfaFactors.length > 0;
   const isEmailVerified = !!user?.email_confirmed_at;
+
+  const genderLabel: Record<string, string> = { male: "Masculino", female: "Feminino", other: "Outro" };
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   const handleLogout = async () => {
@@ -241,23 +285,25 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
 
               {/* Name */}
               <h2 className="text-lg font-bold text-gray-900">{profile?.fullName || "Usuário"}</h2>
-              <p className="text-sm text-gray-500 mb-4">Membro desde Março/2024</p>
+              {membroDesde && (
+                <p className="text-sm text-gray-500 mb-4">Membro desde {membroDesde}</p>
+              )}
 
               {/* Stats */}
               <div className="flex gap-8 text-sm">
                 <div>
                   <div className="flex items-center gap-1 font-bold text-gray-900">
                     <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-                    4.8
+                    {avaliacaoMedia !== null ? avaliacaoMedia : "—"}
                   </div>
                   <p className="text-gray-400 text-xs">Avaliação</p>
                 </div>
                 <div>
-                  <p className="font-bold text-gray-900">12</p>
+                  <p className="font-bold text-gray-900">{aluguelCount ?? "—"}</p>
                   <p className="text-gray-400 text-xs">Aluguéis</p>
                 </div>
                 <div>
-                  <p className="font-bold text-gray-900">3</p>
+                  <p className="font-bold text-gray-900">{itemCount ?? "—"}</p>
                   <p className="text-gray-400 text-xs">Itens</p>
                 </div>
               </div>
@@ -306,12 +352,33 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
                     <p className="text-gray-400 text-xs mb-0.5">Telefone</p>
                     <span className="text-gray-800">{profile?.phone || "—"}</span>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-gray-400 text-xs mb-0.5">CPF</p>
+                      <span className="text-gray-800">{profile?.cpf || "—"}</span>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-xs mb-0.5">Data de Nascimento</p>
+                      <span className="text-gray-800">
+                        {profile?.birthDate
+                          ? new Date(profile.birthDate + "T00:00:00").toLocaleDateString("pt-BR")
+                          : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs mb-0.5">Gênero</p>
+                    <span className="text-gray-800">{profile?.gender ? genderLabel[profile.gender] ?? profile.gender : "—"}</span>
+                  </div>
                   <div>
                     <p className="text-gray-400 text-xs mb-0.5">Endereço</p>
-                    <span className="text-gray-800">
-                      {profile?.rua
-                        ? `${profile.rua}${profile.numero ? `, ${profile.numero}` : ''}${profile.complemento ? ` - ${profile.complemento}` : ''}${profile.bairro ? `, ${profile.bairro}` : ''}${profile.cidade ? `, ${profile.cidade}` : ''}${profile.estado ? `/${profile.estado}` : ''}${profile.cep ? ` - CEP: ${profile.cep}` : ''}`
-                        : "—"}
+                    <span className="text-gray-800 flex flex-col">
+                      {profile?.rua ? (
+                        <>
+                          <span>{profile.rua}{profile.numero ? `, ${profile.numero}` : ''}{profile.complemento ? ` - ${profile.complemento}` : ''}</span>
+                          <span>{profile.bairro ? `${profile.bairro} — ` : ''}{profile.cidade ?? ''}{profile.estado ? `/${profile.estado}` : ''}{profile.cep ? ` · CEP ${profile.cep}` : ''}</span>
+                        </>
+                      ) : "—"}
                     </span>
                   </div>
                 </div>
@@ -320,16 +387,10 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
               {/* PAGAMENTOS */}
               {tab === "pagamentos" && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 border rounded-xl px-4 py-3 text-sm">
-                    <CreditCard className="w-5 h-5 text-gray-500 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium text-gray-800">Cartão de Crédito</p>
-                      <p className="text-gray-400 text-xs tracking-widest">**** **** **** 4321</p>
-                    </div>
-                  </div>
+                  <p className="text-sm text-gray-500 text-center py-4">Nenhum cartão cadastrado.</p>
                   <button className="w-full bg-blue-600 text-white rounded-xl py-3 flex items-center justify-center gap-2 font-semibold hover:bg-blue-700 transition text-sm">
                     <CreditCard className="w-5 h-5" />
-                    Adicionar Novo Cartão
+                    Adicionar Cartão
                   </button>
                 </div>
               )}

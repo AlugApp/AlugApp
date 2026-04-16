@@ -151,12 +151,22 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {items.map((item) => (
               <div key={item.iditem} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition flex flex-col">
-                <div className="relative">
+                <div className="aspect-square w-full overflow-hidden bg-gray-100 relative">
                   <img
-                    src={item.foto_url || "https://via.placeholder.com/300x200?text=Sem+Imagem"}
-                    className="w-full h-48 object-cover"
+                    src={item.foto_url || ""}
+                    className={`w-full h-full object-cover transition-transform duration-300 hover:scale-105 ${!item.foto_url ? "hidden" : ""}`}
                     alt={item.nome}
                   />
+                  {!item.foto_url && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Package className="w-12 h-12 text-gray-300" />
+                    </div>
+                  )}
+                  {item.nome_categoria && (
+                    <span className="absolute top-2 left-2 bg-white/90 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
+                      {item.nome_categoria}
+                    </span>
+                  )}
                   <button
                     onClick={() => handleDelete(item.iditem)}
                     className="absolute top-2 right-2 p-2 bg-red-100 text-red-600 rounded-full hover:bg-red-200 transition"
@@ -169,7 +179,6 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
                   <p className="text-green-600 font-semibold text-sm mt-0.5">
                     R$ {Number(item.valor_aluguel_diario).toFixed(2)}/dia
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">{item.nome_categoria}</p>
                   
                   <div className="mt-auto pt-4 flex gap-2">
                     <button

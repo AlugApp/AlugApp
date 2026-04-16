@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
-  Wrench, Laptop, Dumbbell, Package,
+  Package,
   Search, SlidersHorizontal, X,
   Home as HomeIcon, MessageSquare, User, PlusCircle, CirclePlus,
 } from "lucide-react";
@@ -45,26 +45,25 @@ const LABEL_PRECO: Record<Periodo, string> = {
   mensal: "mês",
 };
 
-const categories = [
-  { id: "1", label: "Ferramentas", icon: Wrench },
-  { id: "2", label: "Esportes", icon: Dumbbell },
-  { id: "3", label: "Eletrônicos", icon: Laptop },
-  { id: "4", label: "Outros", icon: Package },
-];
+interface Categoria {
+  idcategoria: number;
+  nome_categoria: string;
+}
 
 export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem }: HomeProps) {
   const [items, setItems] = useState<Item[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [categoryFilter, setCategoryFilter] = useState("todas");
-  const [searchText, setSearchText] = useState("");
-  const [periodo, setPeriodo] = useState<Periodo>("diario");
-  const [precoMin, setPrecoMin] = useState("");
-  const [precoMax, setPrecoMax] = useState("");
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
-  const [ordenacao, setOrdenacao] = useState<Ordenacao>("recente");
-  const [showFiltros, setShowFiltros] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState(() => sessionStorage.getItem("h_cat") || "todas");
+  const [searchText, setSearchText] = useState(() => sessionStorage.getItem("h_search") || "");
+  const [periodo, setPeriodo] = useState<Periodo>(() => (sessionStorage.getItem("h_periodo") as Periodo) || "diario");
+  const [precoMin, setPrecoMin] = useState(() => sessionStorage.getItem("h_precoMin") || "");
+  const [precoMax, setPrecoMax] = useState(() => sessionStorage.getItem("h_precoMax") || "");
+  const [dataInicio, setDataInicio] = useState(() => sessionStorage.getItem("h_dataInicio") || "");
+  const [dataFim, setDataFim] = useState(() => sessionStorage.getItem("h_dataFim") || "");
+  const [ordenacao, setOrdenacao] = useState<Ordenacao>(() => (sessionStorage.getItem("h_ordenacao") as Ordenacao) || "recente");
+  const [showFiltros, setShowFiltros] = useState(() => sessionStorage.getItem("h_showFiltros") === "true");
 
   const campoPrecoDB: Record<Periodo, string> = {
     diario: "valor_aluguel_diario",
@@ -113,9 +112,27 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   };
 
   useEffect(() => {
+    supabase.from("categoria").select("*").order("nome_categoria").then(({ data }) => {
+      if (data) setCategorias(data);
+    });
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem("h_cat", categoryFilter);
+    sessionStorage.setItem("h_search", searchText);
+    sessionStorage.setItem("h_periodo", periodo);
+    sessionStorage.setItem("h_precoMin", precoMin);
+    sessionStorage.setItem("h_precoMax", precoMax);
+    sessionStorage.setItem("h_dataInicio", dataInicio);
+    sessionStorage.setItem("h_dataFim", dataFim);
+    sessionStorage.setItem("h_ordenacao", ordenacao);
     loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryFilter, searchText, periodo, precoMin, precoMax, dataInicio, dataFim, ordenacao]);
+
+  useEffect(() => {
+    sessionStorage.setItem("h_showFiltros", String(showFiltros));
+  }, [showFiltros]);
 
   const temFiltroAtivo = !!(searchText || precoMin || precoMax || dataInicio || dataFim || categoryFilter !== "todas");
 
@@ -123,6 +140,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     setSearchText(""); setPrecoMin(""); setPrecoMax("");
     setDataInicio(""); setDataFim("");
     setCategoryFilter("todas"); setOrdenacao("recente"); setPeriodo("diario");
+    ["h_cat","h_search","h_periodo","h_precoMin","h_precoMax","h_dataInicio","h_dataFim","h_ordenacao"].forEach(k => sessionStorage.removeItem(k));
   };
 
   return (
@@ -181,6 +199,22 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
         {/* PAINEL DE FILTROS */}
         {showFiltros && (
           <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-6 shadow-sm space-y-5">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Categoria</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="todas">Todas as categorias</option>
+                {categorias.map((cat) => (
+                  <option key={cat.idcategoria} value={String(cat.idcategoria)}>
+                    {cat.nome_categoria}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Período e faixa de preço</label>
               <div className="flex gap-2 mb-3">
@@ -246,28 +280,59 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
           </div>
         )}
 
-        {/* CATEGORIAS */}
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Categorias</h2>
-        <div className="grid grid-cols-4 gap-4 mb-8">
-          {categories.map((cat) => {
-            const Icon = cat.icon;
-            const active = categoryFilter === cat.id;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setCategoryFilter(active ? "todas" : cat.id)}
-                className={`bg-white rounded-2xl py-5 border flex flex-col items-center gap-2 transition hover:shadow-md ${
-                  active ? "border-blue-600 shadow-md" : "border-gray-200"
-                }`}
-              >
-                <Icon className={`w-7 h-7 ${active ? "text-blue-600" : "text-blue-500"}`} strokeWidth={1.5} />
-                <span className={`text-xs font-medium ${active ? "text-blue-600" : "text-gray-600"}`}>
-                  {cat.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {/* CHIPS DE FILTROS ATIVOS */}
+        {temFiltroAtivo && (
+          <div className="flex flex-wrap gap-2 mb-4">
+            {categoryFilter !== "todas" && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                {categorias.find(c => String(c.idcategoria) === categoryFilter)?.nome_categoria || "Categoria"}
+                <button onClick={() => setCategoryFilter("todas")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {searchText && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                Busca: "{searchText}"
+                <button onClick={() => setSearchText("")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {precoMin && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                Mín: R$ {precoMin}
+                <button onClick={() => setPrecoMin("")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {precoMax && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                Máx: R$ {precoMax}
+                <button onClick={() => setPrecoMax("")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {dataInicio && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                De: {dataInicio}
+                <button onClick={() => setDataInicio("")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {dataFim && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                Até: {dataFim}
+                <button onClick={() => setDataFim("")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {periodo !== "diario" && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                {periodo === "semanal" ? "Por semana" : "Por mês"}
+                <button onClick={() => setPeriodo("diario")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+            {ordenacao !== "recente" && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                {ordenacao === "preco_asc" ? "Menor preço" : ordenacao === "preco_desc" ? "Maior preço" : "A-Z"}
+                <button onClick={() => setOrdenacao("recente")}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+          </div>
+        )}
 
         {/* ITENS */}
         <div className="flex items-center justify-between mb-4">
@@ -275,7 +340,11 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
             {loading ? "Buscando..." : `Itens Disponíveis`}
           </h2>
           {temFiltroAtivo && (
-            <button onClick={limparFiltros} className="text-sm text-blue-600 hover:underline">
+            <button
+              onClick={limparFiltros}
+              className="flex items-center gap-1.5 text-sm font-semibold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition"
+            >
+              <X className="w-3.5 h-3.5" />
               Limpar filtros
             </button>
           )}
@@ -304,27 +373,31 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
               const preco = item[CAMPO_PRECO[periodo]] as number;
               return (
                 <div key={item.iditem} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition">
-                  <img
-                    src={item.foto_url || "https://via.placeholder.com/300x200?text=Sem+Imagem"}
-                    className="w-full h-52 object-cover"
-                    alt={item.nome}
-                  />
+                  <div className="aspect-square w-full overflow-hidden bg-gray-100 relative">
+                    <img
+                      src={item.foto_url || ""}
+                      className={`w-full h-full object-cover transition-transform duration-300 hover:scale-105 ${!item.foto_url ? "hidden" : ""}`}
+                      alt={item.nome}
+                    />
+                    {!item.foto_url && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Package className="w-12 h-12 text-gray-300" />
+                      </div>
+                    )}
+                    {item.nome_categoria && (
+                      <span className="absolute top-2 left-2 bg-white/90 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
+                        {item.nome_categoria}
+                      </span>
+                    )}
+                  </div>
                   <div className="p-4">
                     <h3 className="font-bold text-gray-900 text-sm truncate">{item.nome}</h3>
                     <p className="text-green-600 font-semibold text-sm mt-0.5">
                       R$ {Number(preco).toFixed(2)}/{LABEL_PRECO[periodo]}
                     </p>
 
-                    {(item.locador_nome || item.nome_categoria) && (
-                      <div className="mt-1.5 text-xs text-gray-400 leading-snug">
-                        {item.locador_nome && <p>{item.locador_nome}</p>}
-                        {item.locador_apto && item.locador_bloco && (
-                          <p>Apto {item.locador_apto} - Bloco {item.locador_bloco}</p>
-                        )}
-                        {!item.locador_nome && item.nome_categoria && (
-                          <p>{item.nome_categoria}</p>
-                        )}
-                      </div>
+                    {item.locador_nome && (
+                      <p className="mt-1 text-xs text-gray-400 truncate">{item.locador_nome}</p>
                     )}
 
                     <button

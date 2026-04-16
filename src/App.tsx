@@ -92,7 +92,14 @@ const AppContent: React.FC = () => {
   const { session, loading, signOut } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [mode, setMode] = useState<AppMode>('home');
+  const [prevMode, setPrevMode] = useState<AppMode>('home');
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+
+  const goToDetails = (id: number) => {
+    setPrevMode(mode);
+    setSelectedItemId(id);
+    setMode('details');
+  };
 
   // Estado de MFA pendente
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -183,7 +190,7 @@ const AppContent: React.FC = () => {
 
   // ── Autenticado — roteamento de telas ──
   if (mode === 'details' && selectedItemId !== null) {
-    return <ItemDetalhes id={selectedItemId} onGoBack={() => setMode('home')} />;
+    return <ItemDetalhes id={selectedItemId} onGoBack={() => setMode(prevMode)} />;
   }
   if (mode === 'announce') {
     return <AnunciarItem onGoBack={() => setMode('home')} />;
@@ -213,7 +220,7 @@ const AppContent: React.FC = () => {
         onGoBack={() => setMode('home')}
         onGoToPerfil={() => setMode('perfil')}
         onGoToAnnounce={() => setMode('announce')}
-        onOpenItem={(id) => { setSelectedItemId(id); setMode('details'); }}
+        onOpenItem={(id) => goToDetails(id)}
         onEditItem={(id) => { setSelectedItemId(id); setMode('edit-item'); }}
       />
     );
@@ -227,7 +234,7 @@ const AppContent: React.FC = () => {
       onGoToAnnounce={() => setMode('announce')}
       onGoToPerfil={() => setMode('perfil')}
       onGoToMyAnnouncements={() => setMode('my-announcements')}
-      onOpenItem={(id) => { setSelectedItemId(id); setMode('details'); }}
+      onOpenItem={(id) => goToDetails(id)}
     />
   );
 };

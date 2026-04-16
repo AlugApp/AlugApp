@@ -8,9 +8,7 @@ import {
   MessageSquare,
   User,
   Loader2,
-  Lock,
-  Eye,
-  EyeOff,
+
 } from "lucide-react";
 
 interface EditarPerfilProps {
@@ -58,14 +56,7 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
   const [cepLoading, setCepLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Estados para troca de senha
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
-  const [updatingPwd, setUpdatingPwd] = useState(false);
-  const [pwdMsg, setPwdMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  const [form, setForm] = useState({
+const [form, setForm] = useState({
     fullName: "",
     cpf: "",
     email: "",
@@ -195,34 +186,7 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
     setSaving(false);
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmNewPassword) {
-      setPwdMsg({ type: "error", text: "As senhas não coincidem." });
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setPwdMsg({ type: "error", text: "A senha deve ter pelo menos 6 caracteres." });
-      return;
-    }
-
-    setUpdatingPwd(true);
-    setPwdMsg(null);
-
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-
-    if (error) {
-      setPwdMsg({ type: "error", text: error.message });
-    } else {
-      setPwdMsg({ type: "success", text: "Senha alterada com sucesso!" });
-      setNewPassword("");
-      setConfirmNewPassword("");
-    }
-    setUpdatingPwd(false);
-  };
-
-  return (
+return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
       {/* HEADER */}
@@ -407,7 +371,7 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
                         name="cep"
                         value={form.cep}
                         onChange={handleChange}
-                        placeholder="00000-000"
+                        placeholder="CEP"
                         className={inputClass}
                         required
                       />
@@ -533,65 +497,6 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
             </form>
           </div>
 
-          {/* ALTERAR SENHA */}
-          <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
-            <div className="flex items-center gap-2 mb-4">
-              <Lock className="w-5 h-5 text-gray-700" />
-              <h3 className="font-bold text-gray-900">Alterar Senha</h3>
-            </div>
-
-            {pwdMsg && (
-              <div className={`mb-5 p-3 rounded-xl text-sm text-center font-medium ${
-                pwdMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
-              }`}>
-                {pwdMsg.text}
-              </div>
-            )}
-
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative">
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Nova Senha</label>
-                  <div className="relative">
-                    <input
-                      type={showPwd ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className={inputClass}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPwd(!showPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">Confirmar Nova Senha</label>
-                  <input
-                    type={showPwd ? "text" : "password"}
-                    value={confirmNewPassword}
-                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={updatingPwd || !newPassword}
-                  className="bg-blue-700 text-white font-semibold text-sm px-6 py-2 rounded-lg hover:bg-blue-800 transition disabled:opacity-60"
-                >
-                  {updatingPwd ? "Atualizando..." : "Atualizar Senha"}
-                </button>
-              </div>
-            </form>
-          </div>
         </div>
       </div>
 

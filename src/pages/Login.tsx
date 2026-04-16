@@ -15,8 +15,7 @@ interface LoginFormProps {
 const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
+const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<MessageState>(null);
 
@@ -133,17 +132,8 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
                 </button>
               </div>
 
-              {/* Lembrar + Esqueceu */}
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="w-4 h-4 accent-blue-600 rounded"
-                  />
-                  Lembrar minha conta
-                </label>
+              {/* Esqueceu */}
+              <div className="flex justify-end text-sm">
                 <button
                   type="button"
                   className="text-blue-600 hover:underline"
