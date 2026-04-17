@@ -1,15 +1,94 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { ArrowLeft, Star, MessageSquare, Package, ShoppingBag, Clock, Info, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Star, MessageSquare, Package, ShoppingBag, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
 
 interface DetalhesProps {
   id: number;
   onGoBack: () => void;
 }
 
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+const REGRAS = [
+  { titulo: "Condições de devolução", texto: "O item deve ser devolvido nas mesmas condições em que foi entregue." },
+  { titulo: "Verificação", texto: "O responsável pelo item deve verificar seu estado no momento da devolução." },
+  { titulo: "Responsabilidade por danos", texto: "Em caso de danos, o locatário deve arcar com os custos de reparo ou reposição." },
+  { titulo: "Disponibilidade", texto: "O responsável pelo item deve estar disponível para a entrega e retirada nos horários combinados." },
+  { titulo: "Pagamento", texto: "O pagamento poderá ser processado pelo aplicativo ou diretamente ao responsável pelo item." },
+];
+
+function CalendarioLeitura({ datasIndisponiveis }: { datasIndisponiveis: string[] }) {
+  const hoje = new Date();
+  const [mesAtual, setMesAtual] = useState(hoje.getMonth());
+  const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
+
+  const primeiroDia = new Date(anoAtual, mesAtual, 1).getDay();
+  const totalDias = new Date(anoAtual, mesAtual + 1, 0).getDate();
+  const toKey = (d: number) =>
+    `${anoAtual}-${String(mesAtual + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+
+  const cells: (number | null)[] = [
+    ...Array(primeiroDia).fill(null),
+    ...Array.from({ length: totalDias }, (_, i) => i + 1),
+  ];
+
+  const prevMes = () => {
+    if (mesAtual === 0) { setMesAtual(11); setAnoAtual((a) => a - 1); }
+    else setMesAtual((m) => m - 1);
+  };
+  const nextMes = () => {
+    if (mesAtual === 11) { setMesAtual(0); setAnoAtual((a) => a + 1); }
+    else setMesAtual((m) => m + 1);
+  };
+
+  return (
+    <div className="max-w-xs">
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center">
+          <ChevronLeft className="w-3 h-3 text-gray-500" />
+        </button>
+        <span className="text-xs font-semibold text-gray-700">{MESES[mesAtual]} {anoAtual}</span>
+        <button type="button" onClick={nextMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center">
+          <ChevronRight className="w-3 h-3 text-gray-500" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+        {DIAS_SEMANA.map((d) => (
+          <div key={d} className="text-center text-[9px] font-semibold text-gray-400">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((dia, i) => {
+          if (!dia) return <div key={i} />;
+          const key = toKey(dia);
+          const passado = key < hojeStr;
+          const indisponivel = datasIndisponiveis.includes(key);
+          return (
+            <div
+              key={i}
+              className={`h-6 rounded text-[10px] font-medium flex items-center justify-center
+                ${passado ? "text-gray-300" :
+                  indisponivel ? "bg-red-100 text-red-500 border border-red-200" :
+                  "bg-green-50 text-green-700 border border-green-100"}`}
+            >
+              {dia}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-2 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-50 border border-green-200 inline-block" /> Disponível</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-200 inline-block" /> Indisponível</span>
+      </div>
+    </div>
+  );
+}
+
 export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
-  const { profile: myProfile } = useAuth();
+  const { profile: myProfile, user } = useAuth();
   const [item, setItem] = useState<any>(null);
   const [fotos, setFotos] = useState<string[]>([]);
   const [fotoIndex, setFotoIndex] = useState(0);
@@ -68,6 +147,20 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
     load();
   }, [id]);
 
+  const datasIndisponiveis: string[] = Array.isArray(item?.datas_indisponiveis) ? item.datas_indisponiveis : [];
+  const adicionais: string[] = Array.isArray(item?.adicionais) ? item.adicionais : [];
+
+  const rangeContemIndisponivel = (inicio: string, fim: string) => {
+    if (!inicio || !fim) return false;
+    const start = new Date(inicio);
+    const end = new Date(fim);
+    for (const ds of datasIndisponiveis) {
+      const d = new Date(ds);
+      if (d >= start && d <= end) return true;
+    }
+    return false;
+  };
+
   const calcularTotal = () => {
     if (!aluguel.inicio || !aluguel.fim || !item) return null;
     const dias = Math.ceil(
@@ -85,6 +178,10 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
     const calc = calcularTotal();
     if (!calc || calc.dias <= 0) {
       setSendMsg({ type: "error", text: "Data de devolução deve ser após a data de início." });
+      return;
+    }
+    if (rangeContemIndisponivel(aluguel.inicio, aluguel.fim)) {
+      setSendMsg({ type: "error", text: "O período selecionado contém datas indisponíveis." });
       return;
     }
     if (!myProfile?.id || !owner?.id) {
@@ -263,29 +360,48 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
             </div>
           )}
 
-          {/* Detalhes */}
-          <div>
-            <h3 className="font-bold text-gray-900 mb-3">Detalhes</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm text-gray-500">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 flex-shrink-0" />
-                <span>Disponível Imediatamente</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 flex-shrink-0" />
-                <span>Excelente Estado</span>
+          {/* Estado */}
+          {item.estado && (
+            <div>
+              <h3 className="font-bold text-gray-900 mb-2">Estado do item</h3>
+              <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-3 py-1 rounded-full">
+                {item.estado}
+              </span>
+            </div>
+          )}
+
+          {/* Adicionais */}
+          {adicionais.length > 0 && (
+            <div>
+              <h3 className="font-bold text-gray-900 mb-3">Adicionais</h3>
+              <div className="flex flex-wrap gap-2">
+                {adicionais.map((a) => (
+                  <span key={a} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-full">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {a}
+                  </span>
+                ))}
               </div>
             </div>
+          )}
+
+          {/* Disponibilidade */}
+          <div>
+            <h3 className="font-bold text-gray-900 mb-3">Disponibilidade</h3>
+            <CalendarioLeitura datasIndisponiveis={datasIndisponiveis} />
           </div>
 
-          {/* Regras de Uso */}
+          {/* Regras do Aluguel */}
           <div>
-            <h3 className="font-bold text-gray-900 mb-2">Regras de Uso</h3>
-            <ul className="space-y-1 text-sm text-gray-500">
-              {["Devolução no mesmo dia até 22h", "Limpeza após o uso", "Reportar qualquer problema", "Respeitar regras do condomínio"].map((r) => (
-                <li key={r} className="flex items-start gap-2">
-                  <span className="mt-0.5">•</span>
-                  <span>{r}</span>
+            <h3 className="font-bold text-gray-900 mb-3">Regras do aluguel</h3>
+            <ul className="space-y-3">
+              {REGRAS.map((r) => (
+                <li key={r.titulo} className="flex gap-3">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0 mt-1.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{r.texto}</p>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -299,13 +415,17 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
           <p className="text-xs text-gray-500">Valor por diária</p>
           <p className="text-2xl font-bold text-green-600">R$ {Number(item.valor_aluguel_diario).toFixed(2)}</p>
         </div>
-        <button
-          onClick={() => { setShowAluguel(true); setSendMsg(null); }}
-          className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-3 rounded-xl hover:bg-blue-700 transition"
-        >
-          <ShoppingBag className="w-5 h-5" />
-          Alugar
-        </button>
+        {user?.id === item.idlocador ? (
+          <span className="text-sm text-gray-400 italic">Você é o proprietário</span>
+        ) : (
+          <button
+            onClick={() => { setShowAluguel(true); setSendMsg(null); }}
+            className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-3 rounded-xl hover:bg-blue-700 transition"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            Alugar
+          </button>
+        )}
       </div>
 
       {/* MODAL ALUGUEL */}
@@ -344,7 +464,11 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
               />
             </div>
 
-            {calc && (
+            {aluguel.inicio && aluguel.fim && rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
+              <p className="text-xs text-red-500 font-medium">O período selecionado contém datas indisponíveis. Confira o calendário.</p>
+            )}
+
+            {calc && !rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
               <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-700">
                 <span className="font-semibold">{calc.dias} dia{calc.dias > 1 ? "s" : ""}</span> —{" "}
                 Total: <span className="font-bold text-green-600">R$ {calc.total.toFixed(2)}</span>

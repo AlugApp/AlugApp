@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { ArrowLeft, Plus, X, Package } from "lucide-react";
+import { ArrowLeft, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Categoria {
   idcategoria: number;
@@ -15,6 +15,110 @@ interface AnunciarItemProps {
 const inputClass =
   "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50";
 
+const ESTADOS_ITEM = ["Novo", "Seminovo", "Usado"];
+
+const ADICIONAIS_OPCOES = [
+  "Entrega incluída",
+  "Retirada incluída",
+  "Manual disponível",
+  "Acessórios incluídos",
+  "Instalação incluída",
+  "Embalagem original",
+];
+
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+function CalendarioDisponibilidade({
+  datasIndisponiveis,
+  onChange,
+}: {
+  datasIndisponiveis: string[];
+  onChange: (datas: string[]) => void;
+}) {
+  const hoje = new Date();
+  const [mesAtual, setMesAtual] = useState(hoje.getMonth());
+  const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
+
+  const primeiroDia = new Date(anoAtual, mesAtual, 1).getDay();
+  const totalDias = new Date(anoAtual, mesAtual + 1, 0).getDate();
+
+  const toKey = (d: number) =>
+    `${anoAtual}-${String(mesAtual + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const toggleDia = (dia: number) => {
+    const d = new Date(anoAtual, mesAtual, dia);
+    if (d < new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) return;
+    const key = toKey(dia);
+    onChange(
+      datasIndisponiveis.includes(key)
+        ? datasIndisponiveis.filter((x) => x !== key)
+        : [...datasIndisponiveis, key]
+    );
+  };
+
+  const prevMes = () => {
+    if (mesAtual === 0) { setMesAtual(11); setAnoAtual((a) => a - 1); }
+    else setMesAtual((m) => m - 1);
+  };
+  const nextMes = () => {
+    if (mesAtual === 11) { setMesAtual(0); setAnoAtual((a) => a + 1); }
+    else setMesAtual((m) => m + 1);
+  };
+
+  const cells: (number | null)[] = [
+    ...Array(primeiroDia).fill(null),
+    ...Array.from({ length: totalDias }, (_, i) => i + 1),
+  ];
+
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+
+  return (
+    <div className="max-w-xs">
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center">
+          <ChevronLeft className="w-3 h-3 text-gray-500" />
+        </button>
+        <span className="text-xs font-semibold text-gray-700">{MESES[mesAtual]} {anoAtual}</span>
+        <button type="button" onClick={nextMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center">
+          <ChevronRight className="w-3 h-3 text-gray-500" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-0.5">
+        {DIAS_SEMANA.map((d) => (
+          <div key={d} className="text-center text-[9px] font-semibold text-gray-400">{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((dia, i) => {
+          if (!dia) return <div key={i} />;
+          const key = toKey(dia);
+          const passado = key < hojeStr;
+          const indisponivel = datasIndisponiveis.includes(key);
+          return (
+            <button
+              type="button"
+              key={i}
+              onClick={() => toggleDia(dia)}
+              disabled={passado}
+              className={`h-6 rounded text-[10px] font-medium transition
+                ${passado ? "text-gray-300 cursor-not-allowed" :
+                  indisponivel ? "bg-red-100 text-red-600 border border-red-200" :
+                  "hover:bg-blue-50 text-gray-700 border border-transparent"}`}
+            >
+              {dia}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-4 mt-2 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-200 inline-block" /> Indisponível</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-white border border-gray-200 inline-block" /> Disponível</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const { user } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -22,14 +126,16 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [outraCategoria, setOutraCategoria] = useState("");
-
   const [fotos, setFotos] = useState<{ file: File; preview: string }[]>([]);
+  const [datasIndisponiveis, setDatasIndisponiveis] = useState<string[]>([]);
+  const [adicionaisSelecionados, setAdicionaisSelecionados] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     nome: "",
     descricao: "",
     idcategoria: "",
     valor_aluguel_diario: "",
+    estado: "",
   });
 
   useEffect(() => {
@@ -42,8 +148,8 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const isOutros = categoriaSelecionada?.nome_categoria?.toLowerCase() === "outros";
 
   const diario = Number(formData.valor_aluguel_diario) || 0;
-  const semanal = diario > 0 ? +(diario * 7 * 0.9).toFixed(2) : 0;   // 10% desconto semana
-  const mensal  = diario > 0 ? +(diario * 30 * 0.8).toFixed(2) : 0;  // 20% desconto mês
+  const semanal = diario > 0 ? +(diario * 7 * 0.9).toFixed(2) : 0;
+  const mensal  = diario > 0 ? +(diario * 30 * 0.8).toFixed(2) : 0;
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -60,6 +166,12 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   };
 
   const removerFoto = (index: number) => setFotos((prev) => prev.filter((_, i) => i !== index));
+
+  const toggleAdicional = (op: string) => {
+    setAdicionaisSelecionados((prev) =>
+      prev.includes(op) ? prev.filter((x) => x !== op) : [...prev, op]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +199,9 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
         valor_aluguel_semana: semanal,
         valor_aluguel_mensal: mensal,
         idlocador: user?.id,
+        estado: formData.estado || null,
+        adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
+        datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : null,
       }])
       .select()
       .single();
@@ -203,6 +318,19 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               </div>
 
               <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item</label>
+                <select
+                  name="estado" value={formData.estado} onChange={handleChange}
+                  className={`${inputClass} mt-1`}
+                >
+                  <option value="">Selecione o estado</option>
+                  {ESTADOS_ITEM.map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</label>
                 <textarea
                   name="descricao" value={formData.descricao} onChange={handleChange}
@@ -239,6 +367,71 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* DISPONIBILIDADE */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-1">Disponibilidade</h2>
+              <p className="text-xs text-gray-400 mb-4">Toque nas datas para marcá-las como indisponíveis (já reservadas ou bloqueadas).</p>
+              <CalendarioDisponibilidade
+                datasIndisponiveis={datasIndisponiveis}
+                onChange={setDatasIndisponiveis}
+              />
+              {datasIndisponiveis.length > 0 && (
+                <p className="text-xs text-red-500 mt-3">
+                  {datasIndisponiveis.length} data{datasIndisponiveis.length > 1 ? "s" : ""} marcada{datasIndisponiveis.length > 1 ? "s" : ""} como indisponível{datasIndisponiveis.length > 1 ? "s" : ""}.
+                </p>
+              )}
+            </div>
+
+            {/* ADICIONAIS */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-1">Adicionais</h2>
+              <p className="text-xs text-gray-400 mb-4">Selecione o que está incluso no aluguel.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ADICIONAIS_OPCOES.map((op) => {
+                  const ativo = adicionaisSelecionados.includes(op);
+                  return (
+                    <button
+                      type="button"
+                      key={op}
+                      onClick={() => toggleAdicional(op)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition
+                        ${ativo
+                          ? "bg-blue-50 border-blue-400 text-blue-700"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:border-blue-300"}`}
+                    >
+                      <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-white text-[10px]
+                        ${ativo ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+                        {ativo && "✓"}
+                      </span>
+                      {op}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* REGRAS DO ALUGUEL */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-3">Regras do aluguel</h2>
+              <ul className="space-y-3">
+                {[
+                  { titulo: "Condições de devolução", texto: "O item deve ser devolvido nas mesmas condições em que foi entregue." },
+                  { titulo: "Verificação", texto: "O responsável pelo item deve verificar seu estado no momento da devolução." },
+                  { titulo: "Responsabilidade por danos", texto: "Em caso de danos, o locatário deve arcar com os custos de reparo ou reposição." },
+                  { titulo: "Disponibilidade", texto: "O responsável pelo item deve estar disponível para a entrega e retirada nos horários combinados." },
+                  { titulo: "Pagamento", texto: "O pagamento poderá ser processado pelo aplicativo ou diretamente ao responsável pelo item." },
+                ].map((r) => (
+                  <li key={r.titulo} className="flex gap-3">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0 mt-1.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{r.texto}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             {/* BOTÕES */}

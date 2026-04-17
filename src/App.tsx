@@ -12,6 +12,7 @@ import RecuperarSenha from './pages/RecuperarSenha';
 import RedefinirSenha from './pages/RedefinirSenha';
 import MeusAnuncios from './pages/MeusAnuncios';
 import EditarItem from './pages/EditarItem';
+import CompletarPerfil from './pages/CompletarPerfil';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ const MfaChallenge: React.FC<{
 // ─── Conteúdo principal ───────────────────────────────────────────────────────
 
 const AppContent: React.FC = () => {
-  const { session, loading, signOut } = useAuth();
+  const { session, loading, signOut, profile } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [mode, setMode] = useState<AppMode>('home');
   const [prevMode, setPrevMode] = useState<AppMode>('home');
@@ -151,6 +152,11 @@ const AppContent: React.FC = () => {
         <div className="w-10 h-10 border-4 border-blue-700 border-t-transparent rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // ── Perfil incompleto (OAuth sem cadastro) ──
+  if (session && !loading && (!profile || !profile.cpf)) {
+    return <CompletarPerfil />;
   }
 
   // ── Não autenticado ──

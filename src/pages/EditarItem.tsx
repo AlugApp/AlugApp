@@ -16,6 +16,18 @@ interface EditarItemProps {
 const inputClass =
   "w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50";
 
+const ESTADOS_ITEM = ["Novo", "Seminovo", "Usado"];
+
+const ADICIONAIS_OPCOES = [
+  "Entrega incluída",
+  "Retirada incluída",
+  "Manual disponível",
+  "Acessórios incluídos",
+  "Instalação incluída",
+  "Embalagem original",
+];
+
+
 export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const { user } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -24,6 +36,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [outraCategoria, setOutraCategoria] = useState("");
+  const [adicionaisSelecionados, setAdicionaisSelecionados] = useState<string[]>([]);
 
   const [existingFotos, setExistingFotos] = useState<{ id: number; url: string }[]>([]);
   const [novasFotos, setNovasFotos] = useState<{ file: File; preview: string }[]>([]);
@@ -33,6 +46,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
     descricao: "",
     idcategoria: "",
     valor_aluguel_diario: "",
+    estado: "",
   });
 
   useEffect(() => {
@@ -52,7 +66,9 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
         descricao: item.descricao || "",
         idcategoria: String(item.idcategoria),
         valor_aluguel_diario: String(item.valor_aluguel_diario),
+        estado: item.estado || "",
       });
+      setAdicionaisSelecionados(Array.isArray(item.adicionais) ? item.adicionais : []);
       setLoading(false);
     };
     load();
@@ -84,6 +100,12 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
 
   const removerNova = (index: number) => setNovasFotos((prev) => prev.filter((_, i) => i !== index));
 
+  const toggleAdicional = (op: string) => {
+    setAdicionaisSelecionados((prev) =>
+      prev.includes(op) ? prev.filter((x) => x !== op) : [...prev, op]
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isOutros && !outraCategoria.trim()) {
@@ -106,6 +128,8 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
         valor_aluguel_diario: diario,
         valor_aluguel_semana: semanal,
         valor_aluguel_mensal: mensal,
+        estado: formData.estado || null,
+        adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
       })
       .eq("iditem", id)
       .eq("idlocador", user!.id)
@@ -226,6 +250,16 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
               </div>
 
               <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item</label>
+                <select name="estado" value={formData.estado} onChange={handleChange} className={`${inputClass} mt-1`}>
+                  <option value="">Selecione o estado</option>
+                  {ESTADOS_ITEM.map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</label>
                 <textarea name="descricao" value={formData.descricao} onChange={handleChange}
                   placeholder="Descreva o item, estado de conservação, acessórios inclusos..."
@@ -256,6 +290,34 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* ADICIONAIS */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-1">Adicionais</h2>
+              <p className="text-xs text-gray-400 mb-4">Selecione o que está incluso no aluguel.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {ADICIONAIS_OPCOES.map((op) => {
+                  const ativo = adicionaisSelecionados.includes(op);
+                  return (
+                    <button
+                      type="button"
+                      key={op}
+                      onClick={() => toggleAdicional(op)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition
+                        ${ativo
+                          ? "bg-blue-50 border-blue-400 text-blue-700"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:border-blue-300"}`}
+                    >
+                      <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-white text-[10px]
+                        ${ativo ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+                        {ativo && "✓"}
+                      </span>
+                      {op}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* BOTÕES */}

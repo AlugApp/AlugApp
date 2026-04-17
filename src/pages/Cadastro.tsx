@@ -12,6 +12,13 @@ interface RegistrationFormProps {
 
 // ─── Máscaras ─────────────────────────────────────────────────────────────────
 
+const maskDate = (v: string) => {
+  const d = v.replace(/\D/g, '').slice(0, 8);
+  if (d.length <= 2) return d;
+  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
+  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
+};
+
 const maskCPF = (v: string) => {
   const d = v.replace(/\D/g, '').slice(0, 11);
   return d
@@ -64,7 +71,6 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
     confirmPassword: '',
   });
 
-  const [birthDateFocused, setBirthDateFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -103,6 +109,8 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
     if (name === 'cpf') {
       v = maskCPF(value);
+    } else if (name === 'birthDate') {
+      v = maskDate(value);
     } else if (name === 'phone') {
       v = maskPhone(value);
     } else if (name === 'cep') {
@@ -229,9 +237,9 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         {/* LADO ESQUERDO — Azul */}
         <div className="w-64 flex-shrink-0 bg-blue-700 flex flex-col p-8 relative">
           <img
-            src="/AlugAppOgol.png"
+            src="/AlugApp-Branco.png"
             alt="AlugApp"
-            className="w-14 h-14 absolute top-6 left-6"
+            className="w-20 h-20 absolute top-3 left-3"
           />
 
           <div className="flex flex-col justify-center flex-1 mt-16 gap-5">
@@ -321,24 +329,16 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
             {/* Data | Telefone | Gênero */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="relative">
-                <input
-                  type="date"
-                  name="birthDate"
-                  value={formData.birthDate}
-                  onChange={handleChange}
-                  className={`${inputClass} h-11 [&::-webkit-date-and-time-value]:text-left ${!formData.birthDate && !birthDateFocused ? '[&::-webkit-datetime-edit]:opacity-0' : ''}`}
-                  required
-                  disabled={loading}
-                  onFocus={() => setBirthDateFocused(true)}
-                  onBlur={() => setBirthDateFocused(false)}
-                />
-                {!formData.birthDate && !birthDateFocused && (
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
-                    Data de Nascimento*
-                  </span>
-                )}
-              </div>
+              <input
+                type="text"
+                name="birthDate"
+                value={formData.birthDate}
+                onChange={handleChange}
+                placeholder="dd/mm/aaaa*"
+                className={inputClass}
+                required
+                disabled={loading}
+              />
               <input
                 type="tel"
                 name="phone"
