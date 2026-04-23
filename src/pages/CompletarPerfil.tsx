@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, LogOut } from 'lucide-react';
 
 const maskCPF = (v: string) => {
   const d = v.replace(/\D/g, '').slice(0, 11);
@@ -31,6 +31,20 @@ const maskCEP = (v: string) => {
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
 const inputClass = 'w-full bg-gray-100 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
+
+const validateCPF = (cpf: string) => {
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+  const calcVerifier = (slice: number) => {
+    const numbers = digits.slice(0, slice).split('').map(Number);
+    const factor = slice + 1;
+    const total = numbers.reduce((acc, num, index) => acc + num * (factor - index), 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  return calcVerifier(9) === Number(digits[9]) && calcVerifier(10) === Number(digits[10]);
+};
 
 export default function CompletarPerfil() {
   const { user, refreshProfile } = useAuth();
@@ -96,18 +110,50 @@ export default function CompletarPerfil() {
     e.preventDefault();
     setError(null);
 
+    // CPF
     const cpfDigits = formData.cpf.replace(/\D/g, '');
     if (cpfDigits.length !== 11) { setError('CPF deve ter 11 dígitos.'); return; }
+    if (!validateCPF(formData.cpf)) { setError('CPF inválido. Verifique os dígitos e tente novamente.'); return; }
+
+    // Telefone
+    const phoneDigits = formData.phone.replace(/\D/g, '');
+    const ddd = parseInt(phoneDigits.substring(0, 2));
+    if (phoneDigits.length !== 11) { setError('Número de celular inválido. Use o formato (XX) 9XXXX-XXXX.'); return; }
+    if (ddd < 11 || ddd > 99) { setError('DDD inválido. Verifique o número de telefone.'); return; }
+    if (phoneDigits[2] !== '9') { setError('Número de celular inválido. O dígito após o DDD deve ser 9.'); return; }
+
+    // CEP
     const cepDigits = formData.cep.replace(/\D/g, '');
     if (cepDigits.length !== 8) { setError('CEP deve ter 8 dígitos.'); return; }
 
+    // Data de nascimento
+    const dateParts = formData.birthDate.split('/');
+    const [dStr, mStr, yStr] = dateParts;
+    const parsedDate = dateParts.length === 3 ? new Date(`${yStr}-${mStr}-${dStr}`) : null;
+    if (!parsedDate || isNaN(parsedDate.getTime()) || yStr?.length !== 4
+        || parseInt(mStr) < 1 || parseInt(mStr) > 12
+        || parseInt(dStr) < 1 || parseInt(dStr) > 31) {
+      setError('Data de nascimento inválida. Use o formato dd/mm/aaaa.');
+      return;
+    }
+    const isoDate = `${yStr}-${mStr}-${dStr}`;
+
     setLoading(true);
+
+    // CPF duplicado
+    const { data: cpfExists } = await supabase.from('users').select('id').eq('cpf', formData.cpf).maybeSingle();
+    if (cpfExists) { setError('CPF já cadastrado. Utilize outro CPF ou faça login.'); setLoading(false); return; }
+
+    // Telefone duplicado
+    const { data: phoneExists } = await supabase.from('users').select('id').eq('phone', formData.phone).maybeSingle();
+    if (phoneExists) { setError('Número de celular já cadastrado. Utilize outro número ou faça login.'); setLoading(false); return; }
+
     const { error: dbError } = await supabase.from('users').upsert([{
       auth_id: user!.id,
       fullName: formData.fullName,
       email: googleEmail,
       cpf: formData.cpf,
-      birthDate: formData.birthDate,
+      birthDate: isoDate,
       phone: formData.phone,
       gender: formData.gender,
       cep: formData.cep,
@@ -119,7 +165,19 @@ export default function CompletarPerfil() {
       estado: formData.estado,
     }], { onConflict: 'auth_id' });
 
-    if (dbError) { setError('Erro ao salvar perfil. Tente novamente.'); setLoading(false); return; }
+    if (dbError) {
+      const msg = dbError.message.toLowerCase();
+      let text = 'Erro ao salvar perfil. Tente novamente.';
+      if (msg.includes('duplicate key') && msg.includes('cpf')) text = 'CPF já cadastrado. Utilize outro CPF ou faça login.';
+      else if (msg.includes('duplicate key') && msg.includes('phone')) text = 'Número de celular já cadastrado. Utilize outro número ou faça login.';
+      else if (msg.includes('duplicate key')) text = 'Dados duplicados. Verifique CPF e telefone informados.';
+      else if (msg.includes('date/time') || msg.includes('out of range')) text = 'Data de nascimento inválida. Verifique o formato dd/mm/aaaa.';
+      else if (msg.includes('null value') || msg.includes('not null')) text = 'Preencha todos os campos obrigatórios.';
+      setError(text);
+      setLoading(false);
+      return;
+    }
+
     await refreshProfile();
     setLoading(false);
   };
@@ -160,6 +218,15 @@ export default function CompletarPerfil() {
                 Complete seu perfil para começar a usar o AlugApp.
               </p>
             </div>
+
+            <button
+              type="button"
+              onClick={() => supabase.auth.signOut()}
+              className="flex items-center gap-2 text-blue-200 hover:text-white text-xs transition mt-2"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sair da conta
+            </button>
           </div>
         </div>
 

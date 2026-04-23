@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import type { IconBaseProps } from 'react-icons';
-import { FaFacebookF, FaGoogle, FaApple } from 'react-icons/fa';
-import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { FaGoogle } from 'react-icons/fa';
+import { Eye, EyeOff, Loader2, Calendar } from 'lucide-react';
 
 type MessageState = { type: 'success' | 'error'; text: string } | null;
 
@@ -25,6 +25,25 @@ const maskCPF = (v: string) => {
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+};
+
+const validateCPF = (cpf: string) => {
+  const digits = cpf.replace(/\D/g, '');
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(digits)) return false;
+
+  const calcVerifier = (slice: number) => {
+    const numbers = digits.slice(0, slice).split('').map(Number);
+    const factor = slice + 1;
+    const total = numbers.reduce((acc, num, index) => acc + num * (factor - index), 0);
+    const remainder = total % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  const firstVerifier = calcVerifier(9);
+  const secondVerifier = calcVerifier(10);
+
+  return firstVerifier === Number(digits[9]) && secondVerifier === Number(digits[10]);
 };
 
 const maskPhone = (v: string) => {
@@ -52,6 +71,9 @@ const UFS = [
 const inputClass =
   'w-full bg-gray-100 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
 
+const invalidClass =
+  'w-full bg-red-50 border border-red-400 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm';
+
 const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   const [formData, setFormData] = useState({
     fullName: '',
@@ -73,9 +95,22 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [message, setMessage] = useState<MessageState>(null);
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
+
+  const handleOAuth = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) setMessage({ type: 'error', text: 'Erro ao autenticar com Google.' });
+  };
+
+  const ic = (field: string) => invalidFields.has(field) ? invalidClass : inputClass;
+  const sc = (field: string) => `${ic(field)} appearance-none pr-10`;
 
   // ─── ViaCEP ───────────────────────────────────────────────────────────────
   const fetchCep = useCallback(async (cepDigits: string) => {
@@ -123,6 +158,9 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
     setFormData({ ...formData, [name]: v });
     setMessage(null);
+    if (invalidFields.has(name)) {
+      setInvalidFields(prev => { const s = new Set(prev); s.delete(name); return s; });
+    }
   };
 
   // ─── Submit ───────────────────────────────────────────────────────────────
@@ -130,6 +168,52 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
+
+    // ── Campos obrigatórios ─────────────────────────────────────────────────
+    const required = ['fullName','email','cpf','birthDate','phone','gender','cep','rua','numero','bairro','cidade','estado','password','confirmPassword'] as const;
+    const newInvalid = new Set<string>();
+    for (const f of required) {
+      if (!formData[f]) newInvalid.add(f);
+    }
+    if (newInvalid.size > 0) {
+      setInvalidFields(newInvalid);
+      setMessage({ type: 'error', text: 'Preencha todos os campos obrigatórios.' });
+      setLoading(false);
+      return;
+    }
+
+    // ── E-mail — formato ────────────────────────────────────────────────────
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email)) {
+      setInvalidFields(new Set(['email']));
+      setMessage({ type: 'error', text: 'Insira um e-mail válido.' });
+      setLoading(false);
+      return;
+    }
+
+    // ── E-mail — verifica domínio (DNS) ─────────────────────────────────────
+    try {
+      const emailRes = await fetch(
+        `https://disify.com/api/email/${encodeURIComponent(formData.email)}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+      if (emailRes.ok) {
+        const emailData = await emailRes.json();
+        if (!emailData.format || !emailData.dns) {
+          setInvalidFields(new Set(['email']));
+          setMessage({ type: 'error', text: 'E-mail inválido ou domínio inexistente. Verifique e tente novamente.' });
+          setLoading(false);
+          return;
+        }
+        if (emailData.disposable) {
+          setInvalidFields(new Set(['email']));
+          setMessage({ type: 'error', text: 'E-mails temporários/descartáveis não são permitidos.' });
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // API indisponível — continua apenas com validação de formato
+    }
 
     // ── Validações ──────────────────────────────────────────────────────────
     if (formData.password !== formData.confirmPassword) {
@@ -154,26 +238,91 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       setLoading(false);
       return;
     }
+    if (!validateCPF(cpfDigits)) {
+      setMessage({ type: 'error', text: 'CPF inválido. Verifique os dígitos e tente novamente.' });
+      setLoading(false);
+      return;
+    }
 
     const cepDigits = formData.cep.replace(/\D/g, '');
     if (cepDigits.length !== 8) {
+      setInvalidFields(new Set(['cep']));
       setMessage({ type: 'error', text: 'CEP deve ter 8 dígitos.' });
       setLoading(false);
       return;
     }
+
+    // ── Telefone — formato brasileiro ────────────────────────────────────────
+    const phoneDigits = formData.phone.replace(/\D/g, '');
+    const ddd = parseInt(phoneDigits.substring(0, 2));
+    if (phoneDigits.length !== 11) {
+      setInvalidFields(new Set(['phone']));
+      setMessage({ type: 'error', text: 'Número de celular inválido. Use o formato (XX) 9XXXX-XXXX com 11 dígitos.' });
+      setLoading(false);
+      return;
+    }
+    if (ddd < 11 || ddd > 99 || ddd === 20 || ddd === 23 || ddd === 25 || ddd === 26 || ddd === 29 || ddd === 30 || ddd === 36 || ddd === 39 || ddd === 40 || ddd === 50 || ddd === 52 || ddd === 56 || ddd === 57 || ddd === 58 || ddd === 59 || ddd === 60 || ddd === 70 || ddd === 72 || ddd === 76 || ddd === 78 || ddd === 80) {
+      setInvalidFields(new Set(['phone']));
+      setMessage({ type: 'error', text: 'DDD inválido. Verifique o número de telefone.' });
+      setLoading(false);
+      return;
+    }
+    if (phoneDigits[2] !== '9') {
+      setInvalidFields(new Set(['phone']));
+      setMessage({ type: 'error', text: 'Número de celular inválido. O dígito após o DDD deve ser 9.' });
+      setLoading(false);
+      return;
+    }
+
+    // ── Telefone duplicado ────────────────────────────────────────────────
+    const { data: phoneExists } = await supabase
+      .from('users').select('id').eq('phone', formData.phone).maybeSingle();
+    if (phoneExists) {
+      setInvalidFields(new Set(['phone']));
+      setMessage({ type: 'error', text: 'Número de celular já cadastrado. Utilize outro número ou faça login.' });
+      setLoading(false);
+      return;
+    }
+
+    // ── Data de nascimento ────────────────────────────────────────────────
+    const dateParts = formData.birthDate.split('/');
+    const [dStr, mStr, yStr] = dateParts;
+    const parsedDate = dateParts.length === 3
+      ? new Date(`${yStr}-${mStr}-${dStr}`)
+      : null;
+    if (!parsedDate || isNaN(parsedDate.getTime()) || yStr?.length !== 4
+        || parseInt(mStr) < 1 || parseInt(mStr) > 12
+        || parseInt(dStr) < 1 || parseInt(dStr) > 31) {
+      setInvalidFields(new Set(['birthDate']));
+      setMessage({ type: 'error', text: 'Data de nascimento inválida. Use o formato dd/mm/aaaa.' });
+      setLoading(false);
+      return;
+    }
+    const isoDate = `${yStr}-${mStr}-${dStr}`;
 
     try {
       // ── 1. Cria conta no Supabase Auth ──────────────────────────────────
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
+        options: { emailRedirectTo: window.location.origin },
       });
 
       if (authError) {
-        setMessage({ type: 'error', text: authError.message });
+        const msg = authError.message.toLowerCase();
+        let text = 'Erro ao criar conta. Tente novamente.';
+        if (msg.includes('already registered') || msg.includes('already exists')) {
+          text = 'Já existe uma conta com este e-mail. Faça login.';
+        } else if (msg.includes('rate limit') || msg.includes('too many')) {
+          text = 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+        } else if (msg.includes('invalid email')) {
+          text = 'E-mail inválido. Verifique e tente novamente.';
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          text = 'Erro de conexão. Verifique sua internet.';
+        } else if (msg.includes('weak password') || msg.includes('password')) {
+          text = 'Senha fraca. Use pelo menos 6 caracteres com letras e números.';
+        }
+        setMessage({ type: 'error', text });
         setLoading(false);
         return;
       }
@@ -190,7 +339,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         fullName: formData.fullName,
         email: formData.email,
         cpf: formData.cpf,
-        birthDate: formData.birthDate,
+        birthDate: isoDate,
         phone: formData.phone,
         gender: formData.gender,
         cep: formData.cep,
@@ -203,10 +352,23 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       }]);
 
       if (profileError) {
-        setMessage({
-          type: 'error',
-          text: 'Conta criada, mas erro ao salvar perfil: ' + profileError.message,
-        });
+        const msg = profileError.message.toLowerCase();
+        let text = 'Erro ao salvar perfil. Tente novamente.';
+        if (msg.includes('duplicate key') && msg.includes('cpf')) {
+          text = 'CPF já cadastrado. Utilize outro CPF ou faça login.';
+        } else if (msg.includes('duplicate key') && msg.includes('email')) {
+          text = 'E-mail já cadastrado. Utilize outro e-mail ou faça login.';
+        } else if (msg.includes('duplicate key')) {
+          text = 'Dados duplicados. Verifique CPF e e-mail informados.';
+        } else if (msg.includes('date/time') || msg.includes('out of range') || msg.includes('invalid date')) {
+          text = 'Data de nascimento inválida. Verifique o formato dd/mm/aaaa.';
+          setInvalidFields(new Set(['birthDate']));
+        } else if (msg.includes('null value') || msg.includes('not null')) {
+          text = 'Preencha todos os campos obrigatórios.';
+        } else if (msg.includes('network') || msg.includes('fetch')) {
+          text = 'Erro de conexão. Verifique sua internet.';
+        }
+        setMessage({ type: 'error', text });
         setLoading(false);
         return;
       }
@@ -222,6 +384,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         complemento: '', bairro: '', cidade: '', estado: '',
         password: '', confirmPassword: '',
       });
+      setInvalidFields(new Set());
       setTimeout(() => onGoToLogin(), 5000);
     } catch {
       setMessage({ type: 'error', text: 'Erro inesperado. Tente novamente.' });
@@ -245,7 +408,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
           <div className="flex flex-col justify-center flex-1 mt-16 gap-5">
             <div>
               <h2 className="text-2xl font-extrabold text-white leading-tight mb-3">
-                Bem-Vindo<br />De Volta!
+                Bem-vindo<br />de volta!
               </h2>
               <p className="text-blue-200 text-sm leading-relaxed">
                 Acesse sua conta agora mesmo.
@@ -266,19 +429,31 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         <div className="flex-1 p-8 overflow-y-auto">
           <h2 className="text-3xl font-bold text-gray-900 text-center mb-5">Criar Conta</h2>
 
-          {/* Ícones sociais */}
-          <div className="flex justify-center gap-4 mb-3">
-            <button className="w-11 h-11 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 transition">
-              {React.createElement(FaFacebookF as React.FunctionComponent<IconBaseProps>, { size: 16, color: '#1877F2' })}
-            </button>
-            <button className="w-11 h-11 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 transition">
-              {React.createElement(FaGoogle as React.FunctionComponent<IconBaseProps>, { size: 16, color: '#EA4335' })}
-            </button>
-            <button className="w-11 h-11 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-50 transition">
-              {React.createElement(FaApple as React.FunctionComponent<IconBaseProps>, { size: 18, color: '#000' })}
-            </button>
+          {/* Google */}
+          <button
+            type="button"
+            onClick={handleOAuth}
+            className="w-full flex items-center justify-between border border-gray-200 rounded-xl px-4 py-3 bg-white hover:bg-gray-50 transition shadow-sm mb-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold text-gray-800 leading-tight">Continuar com o Google</p>
+                <p className="text-xs text-gray-400">Acesse com sua conta Google</p>
+              </div>
+            </div>
+            {React.createElement(FaGoogle as React.FunctionComponent<IconBaseProps>, { size: 20, color: '#EA4335' })}
+          </button>
+
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-xs text-gray-400">ou crie sua conta</span>
+            <div className="flex-1 h-px bg-gray-200" />
           </div>
-          <p className="text-center text-gray-400 text-sm mb-5">ou crie sua conta</p>
 
           {/* Feedback */}
           {message && (
@@ -289,7 +464,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} noValidate className="space-y-3">
 
             {/* Nome Completo */}
             <input
@@ -298,8 +473,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
               value={formData.fullName}
               onChange={handleChange}
               placeholder="Nome Completo*"
-              className={inputClass}
-              required
+              className={ic('fullName')}
               disabled={loading}
             />
 
@@ -311,8 +485,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="E-mail*"
-                className={inputClass}
-                required
+                className={ic('email')}
                 disabled={loading}
               />
               <input
@@ -321,32 +494,51 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 value={formData.cpf}
                 onChange={handleChange}
                 placeholder="CPF*"
-                className={inputClass}
-                required
+                className={ic('cpf')}
                 disabled={loading}
               />
             </div>
 
             {/* Data | Telefone | Gênero */}
             <div className="grid grid-cols-3 gap-3">
-              <input
-                type="text"
-                name="birthDate"
-                value={formData.birthDate}
-                onChange={handleChange}
-                placeholder="dd/mm/aaaa*"
-                className={inputClass}
-                required
-                disabled={loading}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  name="birthDate"
+                  value={formData.birthDate}
+                  onChange={handleChange}
+                  placeholder="Data de Nascimento*"
+                  className={`${ic('birthDate')} pr-10`}
+                  disabled={loading}
+                />
+                <button
+                  type="button"
+                  onClick={() => dateInputRef.current?.showPicker()}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-600 hover:text-blue-800"
+                  tabIndex={-1}
+                  disabled={loading}
+                >
+                  <Calendar className="w-4 h-4" />
+                </button>
+                <input
+                  ref={dateInputRef}
+                  type="date"
+                  className="sr-only"
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    const [y, m, d] = e.target.value.split('-');
+                    setFormData((prev) => ({ ...prev, birthDate: `${d}/${m}/${y}` }));
+                  }}
+                  disabled={loading}
+                />
+              </div>
               <input
                 type="tel"
                 name="phone"
                 value={formData.phone}
                 onChange={handleChange}
                 placeholder="Telefone*"
-                className={inputClass}
-                required
+                className={ic('phone')}
                 disabled={loading}
               />
               {/* Gênero */}
@@ -355,8 +547,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   name="gender"
                   value={formData.gender}
                   onChange={handleChange}
-                  className={`${inputClass} appearance-none pr-10`}
-                  required
+                  className={sc('gender')}
                   disabled={loading}
                 >
                   <option value="">Gênero*</option>
@@ -385,8 +576,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                     value={formData.cep}
                     onChange={handleChange}
                     placeholder="CEP*"
-                    className={inputClass}
-                    required
+                    className={ic('cep')}
                     disabled={loading}
                   />
                   {cepLoading && (
@@ -399,8 +589,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.rua}
                   onChange={handleChange}
                   placeholder="Rua / Logradouro*"
-                  className={`${inputClass} col-span-2`}
-                  required
+                  className={`${ic('rua')} col-span-2`}
                   disabled={loading}
                 />
               </div>
@@ -413,8 +602,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.numero}
                   onChange={handleChange}
                   placeholder="Número*"
-                  className={inputClass}
-                  required
+                  className={ic('numero')}
                   disabled={loading}
                 />
                 <input
@@ -432,8 +620,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.bairro}
                   onChange={handleChange}
                   placeholder="Bairro*"
-                  className={inputClass}
-                  required
+                  className={ic('bairro')}
                   disabled={loading}
                 />
               </div>
@@ -446,8 +633,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.cidade}
                   onChange={handleChange}
                   placeholder="Cidade*"
-                  className={inputClass}
-                  required
+                  className={ic('cidade')}
                   disabled={loading}
                 />
                 <div className="relative">
@@ -455,8 +641,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                     name="estado"
                     value={formData.estado}
                     onChange={handleChange}
-                    className={`${inputClass} appearance-none pr-10`}
-                    required
+                    className={sc('estado')}
                     disabled={loading}
                   >
                     <option value="">Estado*</option>
@@ -481,8 +666,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Senha*"
-                className={`${inputClass} pr-10`}
-                required
+                className={`${ic('password')} pr-10`}
                 disabled={loading}
               />
               <button
@@ -503,8 +687,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 placeholder="Confirmar Senha*"
-                className={`${inputClass} pr-10`}
-                required
+                className={`${ic('confirmPassword')} pr-10`}
                 disabled={loading}
               />
               <button

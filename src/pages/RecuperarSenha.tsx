@@ -16,6 +16,18 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
     setLoading(true);
     setMessage(null);
 
+    const { data, error: queryError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('email', email)
+      .single();
+
+    if (queryError || !data) {
+      setMessage({ type: 'error', text: 'E-mail não encontrado no banco de dados.' });
+      setLoading(false);
+      return;
+    }
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin,
     });
@@ -25,7 +37,7 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
     } else {
       setMessage({
         type: 'success',
-        text: 'E-mail de recuperação enviado! Verifique sua caixa de entrada.',
+        text: 'E-mail de recuperação enviado! Verifique sua caixa de entrada e, caso não encontre, confira a pasta de spam.',
       });
     }
     setLoading(false);
@@ -34,6 +46,7 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
       <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-md">
+
         <button
           onClick={onGoBack}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 transition"

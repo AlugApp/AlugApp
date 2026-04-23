@@ -5,7 +5,7 @@ import {
   Star, Edit2, Package, HelpCircle, LogOut,
   ShieldCheck, Bell, Shield, CreditCard,
   Home as HomeIcon, PlusCircle, MessageSquare, User,
-  Eye, EyeOff, X,
+  Eye, EyeOff, X, Trash2,
 } from "lucide-react";
 
 type Tab = "informacoes" | "seguranca" | "pagamentos";
@@ -32,6 +32,10 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
   const [senhaMsg, setSenhaMsg] = useState<MessageState>(null);
 
   // ─── MFA ──────────────────────────────────────────────────────────────────
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [mfaFactors, setMfaFactors] = useState<any[]>([]);
   const [mfaLoading, setMfaLoading] = useState(false);
   const [showMfa, setShowMfa] = useState(false);
@@ -107,6 +111,32 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
 
   // ─── Logout ───────────────────────────────────────────────────────────────
   const handleLogout = async () => {
+    await signOut();
+    onLogout();
+  };
+
+  const handleDeleteAccount = () => {
+    setDeletePassword('');
+    setDeleteError(null);
+    setShowDeleteModal(true);
+  };
+
+  const isOAuthUser = user?.app_metadata?.provider !== 'email';
+
+  const confirmDeleteAccount = async () => {
+    if (!isOAuthUser && !deletePassword) { setDeleteError('Digite sua senha.'); return; }
+    setDeleteLoading(true);
+    setDeleteError(null);
+    const { error } = await supabase.rpc('delete_user_account', { input_password: deletePassword });
+    if (error) {
+      if (error.message.includes('Senha incorreta')) {
+        setDeleteError('Senha incorreta. Tente novamente.');
+      } else {
+        setDeleteError('Erro ao deletar conta. Tente novamente.');
+      }
+      setDeleteLoading(false);
+      return;
+    }
     await signOut();
     onLogout();
   };
@@ -268,8 +298,16 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
 
               {/* Avatar */}
               <div className="relative inline-block -mt-9 mb-3">
-                <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
-                  <User className="w-8 h-8 text-blue-600" />
+                <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center overflow-hidden">
+                  {(profile?.avatar_url || user?.user_metadata?.avatar_url) ? (
+                    <img
+                      src={profile?.avatar_url || user?.user_metadata?.avatar_url}
+                      alt="Foto de perfil"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-8 h-8 text-blue-600" />
+                  )}
                 </div>
                 <span className="absolute bottom-0.5 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
               </div>
@@ -413,6 +451,15 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
                     Notificações
                   </button>
 
+                  {/* Deletar Conta */}
+                  <button
+                    onClick={handleDeleteAccount}
+                    className="w-full flex items-center gap-3 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    Deletar Conta
+                  </button>
+
                   {/* MFA — agora funcional */}
                   <button
                     onClick={isMfaActive ? handleMfaUnenroll : handleMfaEnroll}
@@ -462,6 +509,50 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
 
         </div>
       </div>
+
+      {/* ─── MODAL DELETAR CONTA ─────────────────────────────────────────────── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold text-red-600">Deletar Conta</h2>
+              <button onClick={() => setShowDeleteModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-sm text-gray-600">Esta ação é <strong>irreversível</strong>. Todos os seus dados serão removidos permanentemente.</p>
+              {isOAuthUser
+                ? <p className="text-xs text-gray-400 mt-1">Você entrou via Google — nenhuma senha é necessária. Clique em <strong>Deletar</strong> para confirmar.</p>
+                : <p className="text-sm text-gray-600 mt-1">Digite sua senha para confirmar.</p>
+              }
+              {deleteError && (
+                <div className="p-3 rounded-xl bg-red-50 text-red-600 text-sm text-center font-medium">{deleteError}</div>
+              )}
+              {user?.app_metadata?.provider === 'email' && (
+                <input
+                  type="password"
+                  placeholder="Digite sua senha"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  disabled={deleteLoading}
+                  className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-400"
+                />
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 border rounded-xl py-2.5 text-sm text-gray-700 font-medium hover:bg-gray-50 transition">
+                  Cancelar
+                </button>
+                <button onClick={confirmDeleteAccount} disabled={deleteLoading}
+                  className="flex-1 bg-red-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-700 transition disabled:opacity-60">
+                  {deleteLoading ? 'Verificando...' : 'Deletar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── MODAL ALTERAR SENHA ─────────────────────────────────────────────── */}
       {showSenha && (

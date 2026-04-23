@@ -1,7 +1,49 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { ArrowLeft, Plus, X, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+
+const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+function CalendarioDisponibilidade({ datasIndisponiveis, onChange }: { datasIndisponiveis: string[]; onChange: (d: string[]) => void }) {
+  const hoje = new Date();
+  const [mesAtual, setMesAtual] = useState(hoje.getMonth());
+  const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
+  const primeiroDia = new Date(anoAtual, mesAtual, 1).getDay();
+  const totalDias = new Date(anoAtual, mesAtual + 1, 0).getDate();
+  const toKey = (d: number) => `${anoAtual}-${String(mesAtual+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
+  const cells: (number|null)[] = [...Array(primeiroDia).fill(null), ...Array.from({length:totalDias},(_,i)=>i+1)];
+  const toggleDia = (dia: number) => {
+    const key = toKey(dia);
+    onChange(datasIndisponiveis.includes(key) ? datasIndisponiveis.filter(x=>x!==key) : [...datasIndisponiveis, key]);
+  };
+  const prevMes = () => { if(mesAtual===0){setMesAtual(11);setAnoAtual(a=>a-1);}else setMesAtual(m=>m-1); };
+  const nextMes = () => { if(mesAtual===11){setMesAtual(0);setAnoAtual(a=>a+1);}else setMesAtual(m=>m+1); };
+  return (
+    <div className="max-w-xs">
+      <div className="flex items-center justify-between mb-2">
+        <button type="button" onClick={prevMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center"><ChevronLeft className="w-3 h-3 text-gray-500"/></button>
+        <span className="text-xs font-semibold text-gray-700">{MESES[mesAtual]} {anoAtual}</span>
+        <button type="button" onClick={nextMes} className="w-6 h-6 rounded-full hover:bg-gray-100 flex items-center justify-center"><ChevronRight className="w-3 h-3 text-gray-500"/></button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 mb-0.5">{DIAS_SEMANA.map(d=><div key={d} className="text-center text-[9px] font-semibold text-gray-400">{d}</div>)}</div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((dia,i)=>{
+          if(!dia) return <div key={i}/>;
+          const key=toKey(dia), passado=key<hojeStr, indisponivel=datasIndisponiveis.includes(key);
+          return <button key={i} type="button" onClick={()=>!passado&&toggleDia(dia)} disabled={passado}
+            className={`h-6 rounded text-[10px] font-medium transition ${passado?"text-gray-300 cursor-not-allowed":indisponivel?"bg-red-100 text-red-600 border border-red-200":"bg-white border border-gray-200 hover:border-blue-300 text-gray-700"}`}>{dia}</button>;
+        })}
+      </div>
+      <div className="flex gap-4 mt-2 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-200 inline-block"/> Indisponível</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-white border border-gray-200 inline-block"/> Disponível</span>
+      </div>
+    </div>
+  );
+}
 
 interface Categoria {
   idcategoria: number;
@@ -37,6 +79,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [outraCategoria, setOutraCategoria] = useState("");
   const [adicionaisSelecionados, setAdicionaisSelecionados] = useState<string[]>([]);
+  const [datasIndisponiveis, setDatasIndisponiveis] = useState<string[]>([]);
 
   const [existingFotos, setExistingFotos] = useState<{ id: number; url: string }[]>([]);
   const [novasFotos, setNovasFotos] = useState<{ file: File; preview: string }[]>([]);
@@ -61,14 +104,20 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       const { data: fotos } = await supabase.from("fotoitem").select("*").eq("iditem", id).order("ordem_exibicao");
       setExistingFotos((fotos || []).map((f: any) => ({ id: f.idfoto, url: f.url_foto })));
 
+      const descricaoRaw = item.descricao || "";
+      const match = descricaoRaw.match(/^\[(.+?)\]\s*([\s\S]*)/);
+      if (match) {
+        setOutraCategoria(match[1]);
+      }
       setFormData({
         nome: item.nome,
-        descricao: item.descricao || "",
+        descricao: match ? match[2] : descricaoRaw,
         idcategoria: String(item.idcategoria),
         valor_aluguel_diario: String(item.valor_aluguel_diario),
         estado: item.estado || "",
       });
       setAdicionaisSelecionados(Array.isArray(item.adicionais) ? item.adicionais : []);
+      setDatasIndisponiveis(Array.isArray(item.datas_indisponiveis) ? item.datas_indisponiveis : []);
       setLoading(false);
     };
     load();
@@ -130,6 +179,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
         valor_aluguel_mensal: mensal,
         estado: formData.estado || null,
         adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
+        datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : null,
       })
       .eq("iditem", id)
       .eq("idlocador", user!.id)
@@ -290,6 +340,13 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* DISPONIBILIDADE */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <h2 className="font-bold text-gray-900 mb-1">Disponibilidade</h2>
+              <p className="text-xs text-gray-400 mb-4">Clique nos dias em que o item <strong>não</strong> estará disponível.</p>
+              <CalendarioDisponibilidade datasIndisponiveis={datasIndisponiveis} onChange={setDatasIndisponiveis} />
             </div>
 
             {/* ADICIONAIS */}

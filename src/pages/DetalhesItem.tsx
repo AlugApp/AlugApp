@@ -353,12 +353,20 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
           </div>
 
           {/* Descrição */}
-          {item.descricao && (
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">Descrição</h3>
-              <p className="text-gray-500 text-sm leading-relaxed">{item.descricao}</p>
-            </div>
-          )}
+          {item.descricao && (() => {
+            const match = item.descricao.match(/^\[(.+?)\]\s*([\s\S]*)/);
+            const subtipo = match?.[1];
+            const texto = match ? match[2] : item.descricao;
+            return (
+              <div>
+                <h3 className="font-bold text-gray-900 mb-2">Descrição</h3>
+                {subtipo && (
+                  <span className="inline-block bg-blue-50 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full mb-2">{subtipo}</span>
+                )}
+                {texto && <p className="text-gray-500 text-sm leading-relaxed">{texto}</p>}
+              </div>
+            );
+          })()}
 
           {/* Estado */}
           {item.estado && (

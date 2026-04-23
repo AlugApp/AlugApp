@@ -143,7 +143,7 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
         <div className="w-96 bg-blue-700 flex flex-col items-center justify-center p-10 gap-6">
           <div className="text-center">
             <h2 className="text-3xl font-extrabold text-white leading-tight mb-3">
-              Bem-Vindo,<br />Morador/a!
+              Seja<br />bem-vindo!
             </h2>
             <p className="text-blue-200 text-sm leading-relaxed">
               Não tem uma conta?<br />Crie a sua agora mesmo.

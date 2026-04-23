@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { decrypt } from '../lib/crypto';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ export interface UserProfile {
   cidade?: string;
   estado?: string;
   birthDate?: string;
+  avatar_url?: string;
 }
 
 interface AuthContextType {
@@ -49,6 +51,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select('*')
       .eq('auth_id', authId)
       .maybeSingle();
+    if (data) {
+      data.cpf = decrypt(data.cpf ?? '');
+    }
     setProfile(data ?? null);
   };
 
@@ -77,11 +82,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Escuta mudanças de estado (login, logout, confirmação de e-mail, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        fetchProfile(s.user.id);
+        if (event === 'SIGNED_IN') setLoading(true);
+        fetchProfile(s.user.id).finally(() => {
+          if (event === 'SIGNED_IN') setLoading(false);
+        });
       } else {
         setProfile(null);
       }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { encrypt } from "../lib/crypto";
 import {
   ArrowLeft,
   Home as HomeIcon,
@@ -54,6 +55,8 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
   const { user, profile, refreshProfile } = useAuth();
   const [saving, setSaving] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
 const [form, setForm] = useState({
@@ -73,9 +76,25 @@ const [form, setForm] = useState({
     estado: "",
   });
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setAvatarUploading(true);
+    const ext = file.name.split('.').pop();
+    const path = `${user.id}.${ext}`;
+    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+    if (upErr) { setMsg({ type: 'error', text: 'Erro ao enviar foto.' }); setAvatarUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+    await supabase.from('users').update({ avatar_url: publicUrl }).eq('auth_id', user.id);
+    setAvatarPreview(publicUrl);
+    await refreshProfile();
+    setAvatarUploading(false);
+  };
+
   // Carrega dados do perfil via AuthContext
   useEffect(() => {
     if (profile) {
+      setAvatarPreview((profile as any).avatar_url || user?.user_metadata?.avatar_url || null);
       setForm({
         fullName: profile.fullName || "",
         cpf: profile.cpf || "",
@@ -157,7 +176,7 @@ const [form, setForm] = useState({
       .from("users")
       .update({
         fullName: form.fullName,
-        cpf: form.cpf,
+        cpf: encrypt(form.cpf),
         email: form.email,
         birthDate: form.birthDate,
         phone: form.phone,
@@ -224,14 +243,23 @@ return (
             {/* Avatar + título */}
             <div className="px-6 pb-5">
               <div className="relative inline-block -mt-9 mb-3">
-                <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center">
-                  <User className="w-8 h-8 text-blue-600" />
-                </div>
-                <span className="absolute bottom-0.5 right-0 w-5 h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center">
-                  <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </span>
+                <label className="cursor-pointer block">
+                  <div className="w-16 h-16 rounded-full border-4 border-white shadow bg-blue-100 flex items-center justify-center overflow-hidden">
+                    {avatarUploading ? (
+                      <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                    ) : avatarPreview ? (
+                      <img src={avatarPreview} alt="Foto" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-8 h-8 text-blue-600" />
+                    )}
+                  </div>
+                  <span className="absolute bottom-0.5 right-0 w-5 h-5 bg-blue-600 rounded-full border-2 border-white flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                  </span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={avatarUploading} />
+                </label>
               </div>
               <p className="font-bold text-gray-900">Editar Perfil</p>
             </div>
