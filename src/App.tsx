@@ -167,10 +167,16 @@ const AppContent: React.FC = () => {
       return <RecuperarSenha onGoBack={() => setAuthMode('login')} />;
     }
     if (authMode === 'update-password') {
-      return <RedefinirSenha onSuccess={async () => {
-        await signOut();
-        setAuthMode('login');
-      }} />;
+      return <RedefinirSenha
+        onSuccess={async () => {
+          await signOut();
+          setAuthMode('login');
+        }}
+        onGoBack={async () => {
+          await signOut();
+          setAuthMode('login');
+        }}
+      />;
     }
     return (
       <Login
