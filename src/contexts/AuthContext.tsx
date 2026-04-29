@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(s?.user ?? null);
       if (s?.user) {
         hasSessionRef.current = true;
+        setLoading(true);
         fetchProfile(s.user.id).finally(() => {
           initializedRef.current = true;
           setLoading(false);
