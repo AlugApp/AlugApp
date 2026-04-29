@@ -1,9 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import { decrypt } from '../lib/crypto';
-
-// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 export interface UserProfile {
   id?: number;
@@ -33,17 +31,15 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  // loading só é true durante o carregamento inicial — nunca muda depois
   const [loading, setLoading] = useState(true);
+  const initializedRef = useRef(false);
 
   const fetchProfile = async (authId: string) => {
     const { data } = await supabase
@@ -70,28 +66,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Carrega a sessão inicial (incluindo redirecionamento de confirmação de e-mail)
+    // ── Inicialização: carrega sessão existente via getSession ─────────────────
     supabase.auth.getSession().then(({ data: { session: s } }) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        fetchProfile(s.user.id).finally(() => setLoading(false));
+        fetchProfile(s.user.id).finally(() => {
+          initializedRef.current = true;
+          setLoading(false);
+        });
       } else {
+        initializedRef.current = true;
         setLoading(false);
       }
     });
 
-    // Escuta mudanças de estado (login, logout, confirmação de e-mail, etc.)
+    // ── Escuta mudanças de estado ──────────────────────────────────────────────
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // Eventos de inicialização — já tratados pelo getSession acima, ignorar
+      if (event === 'INITIAL_SESSION') return;
+
+      // Renovação de token — atualiza sessão silenciosamente, sem tocar em loading
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(s);
+        return;
+      }
+
+      // Usuário deslogou — limpa tudo
+      if (event === 'SIGNED_OUT') {
+        initializedRef.current = false;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
+      // SIGNED_IN redundante após inicialização — ignorar para não resetar telas
+      if (event === 'SIGNED_IN' && initializedRef.current) return;
+
+      // Primeiro login real (initializedRef ainda false) ou USER_UPDATED
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        if (event === 'SIGNED_IN') setLoading(true);
         fetchProfile(s.user.id).finally(() => {
-          if (event === 'SIGNED_IN') setLoading(false);
+          initializedRef.current = true;
+          setLoading(false);
         });
-      } else {
-        setProfile(null);
       }
     });
 
@@ -104,8 +125,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useAuth() {
   const ctx = useContext(AuthContext);

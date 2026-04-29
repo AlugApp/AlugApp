@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { decrypt } from "../lib/crypto";
 import {
   Star, Edit2, Package, HelpCircle, LogOut,
   ShieldCheck, Bell, Shield, CreditCard,
@@ -393,7 +394,7 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-gray-400 text-xs mb-0.5">CPF</p>
-                      <span className="text-gray-800">{profile?.cpf || "—"}</span>
+                      <span className="text-gray-800">{profile?.cpf ? decrypt(profile.cpf) : "—"}</span>
                     </div>
                     <div>
                       <p className="text-gray-400 text-xs mb-0.5">Data de Nascimento</p>

@@ -215,6 +215,16 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       // API indisponível — continua apenas com validação de formato
     }
 
+    // ── E-mail duplicado ────────────────────────────────────────────────────
+    const { data: emailExists } = await supabase
+      .from('users').select('id').eq('email', formData.email).maybeSingle();
+    if (emailExists) {
+      setInvalidFields(new Set(['email']));
+      setMessage({ type: 'error', text: 'Já existe uma conta com este e-mail. Faça login.' });
+      setLoading(false);
+      return;
+    }
+
     // ── Validações ──────────────────────────────────────────────────────────
     if (formData.password !== formData.confirmPassword) {
       setMessage({ type: 'error', text: 'As senhas não coincidem!' });
@@ -333,6 +343,36 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         return;
       }
 
+      // Supabase retorna identities[] vazio quando o e-mail já existe
+      if (!authData.user.identities || authData.user.identities.length === 0) {
+        // Verifica se há perfil completo ou apenas cadastro incompleto/abandonado
+        const { data: publicProfile } = await supabase
+          .from('users').select('id').eq('email', formData.email).maybeSingle();
+
+        if (publicProfile) {
+          // Conta completa — bloqueia
+          setInvalidFields(new Set(['email']));
+          setMessage({ type: 'error', text: 'Já existe uma conta com este e-mail. Faça login.' });
+          setLoading(false);
+          return;
+        }
+
+        // Cadastro anterior incompleto — limpa e tenta novamente
+        await supabase.rpc('cleanup_orphaned_auth_user', { p_email: formData.email });
+        const { data: retryData, error: retryError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: { emailRedirectTo: window.location.origin },
+        });
+        if (retryError || !retryData.user) {
+          setMessage({ type: 'error', text: 'Erro ao criar conta. Tente novamente.' });
+          setLoading(false);
+          return;
+        }
+        // Continua com o novo usuário
+        (authData as any).user = retryData.user;
+      }
+
       // ── 2. Insere perfil na tabela users ────────────────────────────────
       const { error: profileError } = await supabase.from('users').insert([{
         auth_id: authData.user.id,
@@ -427,7 +467,8 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
         {/* LADO DIREITO — Formulário */}
         <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-5">Criar Conta</h2>
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-1">Criar Conta</h2>
+          <p className="text-xs text-gray-400 text-center mb-4">Campos com <span className="text-red-500 font-semibold">*</span> são obrigatórios</p>
 
           {/* Google */}
           <button

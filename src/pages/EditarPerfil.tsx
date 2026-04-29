@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { encrypt } from "../lib/crypto";
+import { decrypt } from "../lib/crypto";
 import {
   ArrowLeft,
   Home as HomeIcon,
@@ -9,7 +9,7 @@ import {
   MessageSquare,
   User,
   Loader2,
-
+  X,
 } from "lucide-react";
 
 interface EditarPerfilProps {
@@ -58,6 +58,10 @@ export default function EditarPerfil({ onGoBack, onGoHome, onGoToMyAnnouncements
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [showEmailChange, setShowEmailChange] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailMsg, setEmailMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [emailSaving, setEmailSaving] = useState(false);
 
 const [form, setForm] = useState({
     fullName: "",
@@ -91,13 +95,22 @@ const [form, setForm] = useState({
     setAvatarUploading(false);
   };
 
+  const handleAvatarRemove = async () => {
+    if (!user) return;
+    setAvatarUploading(true);
+    await supabase.from('users').update({ avatar_url: null }).eq('auth_id', user.id);
+    setAvatarPreview(null);
+    await refreshProfile();
+    setAvatarUploading(false);
+  };
+
   // Carrega dados do perfil via AuthContext
   useEffect(() => {
     if (profile) {
       setAvatarPreview((profile as any).avatar_url || user?.user_metadata?.avatar_url || null);
       setForm({
         fullName: profile.fullName || "",
-        cpf: profile.cpf || "",
+        cpf: profile.cpf ? decrypt(profile.cpf) : "",
         email: profile.email || "",
         birthDate: profile.birthDate || "",
         phone: profile.phone || "",
@@ -176,9 +189,6 @@ const [form, setForm] = useState({
       .from("users")
       .update({
         fullName: form.fullName,
-        cpf: encrypt(form.cpf),
-        email: form.email,
-        birthDate: form.birthDate,
         phone: form.phone,
         gender: form.gender,
         cep: form.cep,
@@ -194,15 +204,40 @@ const [form, setForm] = useState({
     if (error) {
       setMsg({ type: "error", text: "Erro ao salvar. Tente novamente." });
     } else {
-      if (form.email !== user.email) {
-        await supabase.auth.updateUser({ email: form.email });
-      }
       await refreshProfile();
       setMsg({ type: "success", text: "Perfil atualizado com sucesso!" });
       setTimeout(() => onGoBack(), 1200);
     }
 
     setSaving(false);
+  };
+
+  const handleEmailChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newEmail.trim()) return;
+    if (newEmail === form.email) {
+      setEmailMsg({ type: "error", text: "O novo e-mail é igual ao atual." });
+      return;
+    }
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(newEmail)) {
+      setEmailMsg({ type: "error", text: "Insira um e-mail válido." });
+      return;
+    }
+    setEmailSaving(true);
+    setEmailMsg(null);
+    const { error } = await supabase.auth.updateUser({ email: newEmail });
+    if (error) {
+      setEmailMsg({ type: "error", text: "Erro ao solicitar troca. Tente novamente." });
+    } else {
+      await supabase.from("users").update({ email: newEmail }).eq("auth_id", user.id);
+      setEmailMsg({
+        type: "success",
+        text: `Confirmação enviada para ${form.email}. Clique no link recebido para confirmar a troca.`,
+      });
+      setNewEmail("");
+      setShowEmailChange(false);
+    }
+    setEmailSaving(false);
   };
 
 return (
@@ -260,6 +295,16 @@ return (
                   </span>
                   <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} disabled={avatarUploading} />
                 </label>
+                {avatarPreview && !avatarUploading && (
+                  <button
+                    type="button"
+                    onClick={handleAvatarRemove}
+                    className="absolute -top-1 -left-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center hover:bg-red-600 transition"
+                    title="Remover foto"
+                  >
+                    <X className="w-2.5 h-2.5 text-white" />
+                  </button>
+                )}
               </div>
               <p className="font-bold text-gray-900">Editar Perfil</p>
             </div>
@@ -282,7 +327,7 @@ return (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    Nome Completo <span className="text-blue-600">*</span>
+                    Nome Completo <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -295,17 +340,15 @@ return (
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    CPF <span className="text-blue-600">*</span>
+                  <label className="text-xs font-semibold text-gray-400 mb-1 flex items-center gap-1">
+                    CPF
+                    <span className="text-xs font-normal text-gray-400 normal-case tracking-normal">(não editável)</span>
                   </label>
                   <input
                     type="text"
-                    name="cpf"
                     value={form.cpf}
-                    onChange={handleChange}
-                    placeholder="000.000.000-00"
-                    className={inputClass}
-                    required
+                    readOnly
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-400 bg-gray-100 cursor-not-allowed select-none"
                   />
                 </div>
               </div>
@@ -313,30 +356,33 @@ return (
               {/* E-mail | Data de Nascimento */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    E-mail <span className="text-blue-600">*</span>
+                  <label className="text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
+                    <span>E-mail</span>
+                    <button
+                      type="button"
+                      onClick={() => { setShowEmailChange(!showEmailChange); setEmailMsg(null); setNewEmail(""); }}
+                      className="text-xs text-blue-600 font-medium hover:underline normal-case tracking-normal"
+                    >
+                      {showEmailChange ? "Cancelar" : "Alterar"}
+                    </button>
                   </label>
                   <input
                     type="email"
-                    name="email"
                     value={form.email}
-                    onChange={handleChange}
-                    placeholder="E-mail"
-                    className={inputClass}
-                    required
+                    readOnly
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-400 bg-gray-100 cursor-not-allowed select-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    Data de Nascimento <span className="text-blue-600">*</span>
+                  <label className="text-xs font-semibold text-gray-400 mb-1 flex items-center gap-1">
+                    Data de Nascimento
+                    <span className="text-xs font-normal text-gray-400 normal-case tracking-normal">(não editável)</span>
                   </label>
                   <input
                     type="date"
-                    name="birthDate"
                     value={form.birthDate}
-                    onChange={handleChange}
-                    className={inputClass}
-                    required
+                    readOnly
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-400 bg-gray-100 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -345,7 +391,7 @@ return (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    Telefone <span className="text-blue-600">*</span>
+                    Telefone <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="tel"
@@ -359,7 +405,7 @@ return (
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                    Gênero <span className="text-blue-600">*</span>
+                    Gênero <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <select
@@ -391,7 +437,7 @@ return (
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      CEP <span className="text-blue-600">*</span>
+                      CEP <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <input
@@ -410,7 +456,7 @@ return (
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Rua / Logradouro <span className="text-blue-600">*</span>
+                      Rua / Logradouro <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -428,7 +474,7 @@ return (
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Número <span className="text-blue-600">*</span>
+                      Número <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -453,7 +499,7 @@ return (
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Bairro <span className="text-blue-600">*</span>
+                      Bairro <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -471,7 +517,7 @@ return (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Cidade <span className="text-blue-600">*</span>
+                      Cidade <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -485,7 +531,7 @@ return (
                   </div>
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
-                      Estado <span className="text-blue-600">*</span>
+                      Estado <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <select
@@ -524,6 +570,39 @@ return (
 
             </form>
           </div>
+
+          {/* SEÇÃO TROCA DE E-MAIL */}
+          {showEmailChange && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mt-4">
+              <h3 className="text-sm font-semibold text-blue-800 mb-1">Alterar E-mail</h3>
+              <p className="text-xs text-blue-600 mb-3">
+                Um link de confirmação será enviado para <strong>{form.email}</strong>. Clique nele para confirmar a troca.
+              </p>
+              {emailMsg && (
+                <div className={`mb-3 p-3 rounded-lg text-xs font-medium ${emailMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>
+                  {emailMsg.text}
+                </div>
+              )}
+              <form onSubmit={handleEmailChange} className="flex gap-2">
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => { setNewEmail(e.target.value); setEmailMsg(null); }}
+                  placeholder="Novo e-mail"
+                  className="flex-1 border border-blue-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  required
+                  disabled={emailSaving}
+                />
+                <button
+                  type="submit"
+                  disabled={emailSaving || !newEmail.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
+                >
+                  {emailSaving ? "Enviando..." : "Confirmar"}
+                </button>
+              </form>
+            </div>
+          )}
 
         </div>
       </div>

@@ -45,6 +45,10 @@ function CalendarioDisponibilidade({ datasIndisponiveis, onChange }: { datasIndi
   );
 }
 
+type FotoDisplay =
+  | { kind: "existing"; id: number; url: string }
+  | { kind: "new"; file: File; preview: string };
+
 interface Categoria {
   idcategoria: number;
   nome_categoria: string;
@@ -80,9 +84,8 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const [outraCategoria, setOutraCategoria] = useState("");
   const [adicionaisSelecionados, setAdicionaisSelecionados] = useState<string[]>([]);
   const [datasIndisponiveis, setDatasIndisponiveis] = useState<string[]>([]);
-
-  const [existingFotos, setExistingFotos] = useState<{ id: number; url: string }[]>([]);
-  const [novasFotos, setNovasFotos] = useState<{ file: File; preview: string }[]>([]);
+  const [fotos, setFotos] = useState<FotoDisplay[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -101,14 +104,13 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       const { data: item, error } = await supabase.from("item").select("*").eq("iditem", id).single();
       if (error || !item) { onGoBack(); return; }
 
-      const { data: fotos } = await supabase.from("fotoitem").select("*").eq("iditem", id).order("ordem_exibicao");
-      setExistingFotos((fotos || []).map((f: any) => ({ id: f.idfoto, url: f.url_foto })));
+      const { data: fotosData } = await supabase.from("fotoitem").select("*").eq("iditem", id).order("ordem_exibicao");
+      setFotos((fotosData || []).map((f: any) => ({ kind: "existing" as const, id: f.idfoto, url: f.url_foto })));
 
       const descricaoRaw = item.descricao || "";
       const match = descricaoRaw.match(/^\[(.+?)\]\s*([\s\S]*)/);
-      if (match) {
-        setOutraCategoria(match[1]);
-      }
+      if (match) setOutraCategoria(match[1]);
+
       setFormData({
         nome: item.nome,
         descricao: match ? match[2] : descricaoRaw,
@@ -137,17 +139,28 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    const novas = files.map((file) => ({ file, preview: URL.createObjectURL(file) }));
-    setNovasFotos((prev) => [...prev, ...novas]);
+    const novas: FotoDisplay[] = files.map(file => ({ kind: "new", file, preview: URL.createObjectURL(file) }));
+    setFotos(prev => [...prev, ...novas]);
     e.target.value = "";
   };
 
-  const removerExisting = async (fotoId: number) => {
-    await supabase.from("fotoitem").delete().eq("idfoto", fotoId);
-    setExistingFotos((prev) => prev.filter((f) => f.id !== fotoId));
+  const removerFoto = async (index: number) => {
+    const foto = fotos[index];
+    if (foto.kind === "existing") {
+      await supabase.from("fotoitem").delete().eq("idfoto", foto.id);
+    }
+    setFotos(prev => prev.filter((_, i) => i !== index));
   };
 
-  const removerNova = (index: number) => setNovasFotos((prev) => prev.filter((_, i) => i !== index));
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) return;
+    const updated = [...fotos];
+    const [moved] = updated.splice(dragIndex, 1);
+    updated.splice(index, 0, moved);
+    setFotos(updated);
+    setDragIndex(null);
+  };
 
   const toggleAdicional = (op: string) => {
     setAdicionaisSelecionados((prev) =>
@@ -157,6 +170,10 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.estado || !formData.descricao.trim()) {
+      setMsg({ type: "error", text: "Preencha todos os campos obrigatórios." });
+      return;
+    }
     if (isOutros && !outraCategoria.trim()) {
       setMsg({ type: "error", text: "Descreva o tipo do item para a categoria Outros." });
       return;
@@ -191,19 +208,30 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       return;
     }
 
-    if (novasFotos.length > 0) {
-      setUploading(true);
-      const ordemBase = existingFotos.length + 1;
-      for (let i = 0; i < novasFotos.length; i++) {
+    setUploading(true);
+
+    // Passo 1: mover fotos existentes para offset alto para evitar conflito de unique constraint
+    for (let i = 0; i < fotos.length; i++) {
+      if (fotos[i].kind === "existing") {
+        await supabase.from("fotoitem").update({ ordem_exibicao: 1000 + i }).eq("idfoto", (fotos[i] as any).id);
+      }
+    }
+
+    // Passo 2: definir a ordem final e fazer upload de novas fotos
+    for (let i = 0; i < fotos.length; i++) {
+      const foto = fotos[i];
+      if (foto.kind === "existing") {
+        await supabase.from("fotoitem").update({ ordem_exibicao: i + 1 }).eq("idfoto", foto.id);
+      } else {
         const fileName = `${id}-${Date.now()}-${i}`;
-        const { error: uploadError } = await supabase.storage.from("items").upload(fileName, novasFotos[i].file);
+        const { error: uploadError } = await supabase.storage.from("items").upload(fileName, foto.file);
         if (!uploadError) {
           const fotoUrl = `https://${process.env.REACT_APP_SUPABASE_URL!.replace("https://", "")}/storage/v1/object/public/items/${fileName}`;
-          await supabase.from("fotoitem").insert([{ iditem: id, url_foto: fotoUrl, ordem_exibicao: ordemBase + i }]);
+          await supabase.from("fotoitem").insert([{ iditem: id, url_foto: fotoUrl, ordem_exibicao: i + 1 }]);
         }
       }
-      setUploading(false);
     }
+    setUploading(false);
 
     setMsg({ type: "success", text: "Anúncio atualizado com sucesso!" });
     setTimeout(() => onGoBack(), 1500);
@@ -243,31 +271,35 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Fotos do item</p>
               <div className="flex gap-3 flex-wrap">
-                {existingFotos.map((f, i) => (
-                  <div key={f.id} className="relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
-                    <img src={f.url} className="w-full h-full object-cover" alt={`foto ${i + 1}`} />
-                    <button type="button" onClick={() => removerExisting(f.id)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                    {i === 0 && <span className="absolute bottom-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded">Principal</span>}
-                  </div>
-                ))}
-                {novasFotos.map((f, i) => (
-                  <div key={`new-${i}`} className="relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
-                    <img src={f.preview} className="w-full h-full object-cover" alt={`nova ${i + 1}`} />
-                    <button type="button" onClick={() => removerNova(i)}
-                      className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-                      <X className="w-3 h-3 text-white" />
-                    </button>
-                  </div>
-                ))}
+                {fotos.map((f, i) => {
+                  const src = f.kind === "existing" ? f.url : f.preview;
+                  return (
+                    <div
+                      key={i}
+                      draggable
+                      onDragStart={() => handleDragStart(i)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => handleDrop(i)}
+                      className={`relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${dragIndex === i ? "opacity-40" : "opacity-100"}`}
+                    >
+                      <img src={src} className="w-full h-full object-cover pointer-events-none" alt={`foto ${i + 1}`} />
+                      <button type="button" onClick={() => removerFoto(i)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                      {i === 0 && <span className="absolute bottom-1 left-1 bg-blue-600 text-white text-[10px] font-bold px-1.5 rounded">Principal</span>}
+                    </div>
+                  );
+                })}
                 <label className="cursor-pointer w-24 h-24 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-1 hover:border-blue-400 hover:bg-blue-50 transition flex-shrink-0">
                   <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} />
                   <Plus className="w-6 h-6 text-gray-400" />
                   <span className="text-xs text-gray-400">Adicionar</span>
                 </label>
               </div>
+              <p className="text-xs text-gray-400 mt-2">
+                {fotos.length === 0 ? "A primeira foto adicionada será a principal." : "Arraste as fotos para reordenar. A primeira será a principal."}
+              </p>
             </div>
 
             {/* INFORMAÇÕES */}
@@ -275,13 +307,13 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
               <h2 className="font-bold text-gray-900">Informações do item</h2>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Título *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Título <span className="text-red-500">*</span></label>
                 <input type="text" name="nome" value={formData.nome} onChange={handleChange}
                   placeholder="Ex: Furadeira elétrica 800W" className={`${inputClass} mt-1`} required />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria <span className="text-red-500">*</span></label>
                 <select name="idcategoria" value={formData.idcategoria} onChange={handleChange}
                   className={`${inputClass} mt-1`} required>
                   <option value="">Selecione uma categoria</option>
@@ -300,8 +332,8 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item</label>
-                <select name="estado" value={formData.estado} onChange={handleChange} className={`${inputClass} mt-1`}>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item <span className="text-red-500">*</span></label>
+                <select name="estado" value={formData.estado} onChange={handleChange} className={`${inputClass} mt-1`} required>
                   <option value="">Selecione o estado</option>
                   {ESTADOS_ITEM.map((e) => (
                     <option key={e} value={e}>{e}</option>
@@ -310,10 +342,10 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição <span className="text-red-500">*</span></label>
                 <textarea name="descricao" value={formData.descricao} onChange={handleChange}
                   placeholder="Descreva o item, estado de conservação, acessórios inclusos..."
-                  className={`${inputClass} mt-1 min-h-28 resize-none`} />
+                  className={`${inputClass} mt-1 min-h-28 resize-none`} required />
               </div>
             </div>
 
@@ -321,7 +353,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
               <h2 className="font-bold text-gray-900">Preços</h2>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor por diária (R$) *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor por diária (R$) <span className="text-red-500">*</span></label>
                 <input type="number" name="valor_aluguel_diario" value={formData.valor_aluguel_diario}
                   onChange={handleChange} placeholder="0,00" min="0" step="0.01"
                   className={`${inputClass} mt-1`} required />

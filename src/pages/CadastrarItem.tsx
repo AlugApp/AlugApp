@@ -129,6 +129,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const [fotos, setFotos] = useState<{ file: File; preview: string }[]>([]);
   const [datasIndisponiveis, setDatasIndisponiveis] = useState<string[]>([]);
   const [adicionaisSelecionados, setAdicionaisSelecionados] = useState<string[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -167,6 +168,16 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
 
   const removerFoto = (index: number) => setFotos((prev) => prev.filter((_, i) => i !== index));
 
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDrop = (index: number) => {
+    if (dragIndex === null || dragIndex === index) return;
+    const updated = [...fotos];
+    const [moved] = updated.splice(dragIndex, 1);
+    updated.splice(index, 0, moved);
+    setFotos(updated);
+    setDragIndex(null);
+  };
+
   const toggleAdicional = (op: string) => {
     setAdicionaisSelecionados((prev) =>
       prev.includes(op) ? prev.filter((x) => x !== op) : [...prev, op]
@@ -175,8 +186,12 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.nome || !formData.idcategoria || !formData.valor_aluguel_diario) {
+    if (!formData.nome || !formData.idcategoria || !formData.valor_aluguel_diario || !formData.estado || !formData.descricao.trim()) {
       setMsg({ type: "error", text: "Preencha todos os campos obrigatórios." });
+      return;
+    }
+    if (fotos.length === 0) {
+      setMsg({ type: "error", text: "Adicione pelo menos uma foto do item." });
       return;
     }
     if (isOutros && !outraCategoria.trim()) {
@@ -254,11 +269,18 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
 
             {/* FOTOS */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Fotos do item</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Fotos do item <span className="text-red-500">*</span></p>
               <div className="flex gap-3 flex-wrap">
                 {fotos.map((f, i) => (
-                  <div key={i} className="relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0">
-                    <img src={f.preview} className="w-full h-full object-cover" alt={`foto ${i + 1}`} />
+                  <div
+                    key={i}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleDrop(i)}
+                    className={`relative w-24 h-24 rounded-xl overflow-hidden flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${dragIndex === i ? "opacity-40" : "opacity-100"}`}
+                  >
+                    <img src={f.preview} className="w-full h-full object-cover pointer-events-none" alt={`foto ${i + 1}`} />
                     <button type="button" onClick={() => removerFoto(i)}
                       className="absolute top-1 right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
                       <X className="w-3 h-3 text-white" />
@@ -272,7 +294,9 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
                   <span className="text-xs text-gray-400">Adicionar</span>
                 </label>
               </div>
-              {fotos.length === 0 && <p className="text-xs text-gray-400 mt-2">A primeira foto adicionada será a principal.</p>}
+              <p className="text-xs text-gray-400 mt-2">
+                {fotos.length === 0 ? "A primeira foto adicionada será a principal." : "Arraste as fotos para reordenar. A primeira será a principal."}
+              </p>
             </div>
 
             {/* INFORMAÇÕES */}
@@ -280,7 +304,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               <h2 className="font-bold text-gray-900">Informações do item</h2>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Título *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Título <span className="text-red-500">*</span></label>
                 <input
                   type="text" name="nome" value={formData.nome} onChange={handleChange}
                   placeholder="Ex: Furadeira elétrica 800W"
@@ -289,7 +313,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria <span className="text-red-500">*</span></label>
                 <select
                   name="idcategoria" value={formData.idcategoria} onChange={handleChange}
                   className={`${inputClass} mt-1`} required
@@ -318,10 +342,10 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado do item <span className="text-red-500">*</span></label>
                 <select
                   name="estado" value={formData.estado} onChange={handleChange}
-                  className={`${inputClass} mt-1`}
+                  className={`${inputClass} mt-1`} required
                 >
                   <option value="">Selecione o estado</option>
                   {ESTADOS_ITEM.map((e) => (
@@ -331,11 +355,11 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição <span className="text-red-500">*</span></label>
                 <textarea
                   name="descricao" value={formData.descricao} onChange={handleChange}
                   placeholder="Descreva o item, estado de conservação, acessórios inclusos..."
-                  className={`${inputClass} mt-1 min-h-28 resize-none`}
+                  className={`${inputClass} mt-1 min-h-28 resize-none`} required
                 />
               </div>
             </div>
@@ -345,7 +369,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
               <h2 className="font-bold text-gray-900">Preços</h2>
 
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor por diária (R$) *</label>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor por diária (R$) <span className="text-red-500">*</span></label>
                 <input
                   type="number" name="valor_aluguel_diario" value={formData.valor_aluguel_diario}
                   onChange={handleChange} placeholder="0,00" min="0" step="0.01"

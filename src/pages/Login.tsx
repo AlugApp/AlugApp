@@ -23,7 +23,7 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
     setMessage(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: `${window.location.origin}/` },
     });
     if (error) setMessage({ type: 'error', text: 'Erro ao autenticar. Tente novamente.' });
   };

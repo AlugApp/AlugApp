@@ -117,16 +117,15 @@ const AppContent: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Verifica se MFA (AAL2) é necessário após sessão ser criada
+  // Verifica se MFA (AAL2) é necessário — roda apenas quando o user muda (login/logout)
   useEffect(() => {
-    if (!session) {
+    if (!session?.user?.id) {
       setMfaRequired(false);
       return;
     }
 
     supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data }) => {
       if (data && data.nextLevel === 'aal2' && data.nextLevel !== data.currentLevel) {
-        // MFA necessário: busca fator e cria challenge
         supabase.auth.mfa.listFactors().then(({ data: factors }) => {
           const totp = factors?.totp?.[0];
           if (totp) {
@@ -143,7 +142,7 @@ const AppContent: React.FC = () => {
         setMfaRequired(false);
       }
     });
-  }, [session?.access_token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Loading ──
   if (loading) {

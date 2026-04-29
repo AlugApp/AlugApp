@@ -221,18 +221,22 @@ export default function CompletarPerfil() {
 
             <button
               type="button"
-              onClick={() => supabase.auth.signOut()}
+              onClick={async () => {
+                await supabase.rpc('cleanup_orphaned_auth_user', { p_email: googleEmail });
+                await supabase.auth.signOut();
+              }}
               className="flex items-center gap-2 text-blue-200 hover:text-white text-xs transition mt-2"
             >
               <LogOut className="w-3.5 h-3.5" />
-              Sair da conta
+              Cancelar cadastro
             </button>
           </div>
         </div>
 
         {/* FORMULÁRIO */}
         <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-5">Complete seu perfil</h2>
+          <h2 className="text-3xl font-bold text-gray-900 text-center mb-1">Complete seu perfil</h2>
+          <p className="text-xs text-gray-400 text-center mb-4">Campos com <span className="text-red-500 font-semibold">*</span> são obrigatórios</p>
 
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm font-medium text-center">{error}</div>
