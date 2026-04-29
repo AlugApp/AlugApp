@@ -229,7 +229,6 @@ const [form, setForm] = useState({
     if (error) {
       setEmailMsg({ type: "error", text: "Erro ao solicitar troca. Tente novamente." });
     } else {
-      await supabase.from("users").update({ email: newEmail }).eq("auth_id", user.id);
       setEmailMsg({
         type: "success",
         text: `Confirmação enviada para ${form.email}. Clique no link recebido para confirmar a troca.`,
