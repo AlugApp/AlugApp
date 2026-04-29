@@ -40,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // loading só é true durante o carregamento inicial — nunca muda depois
   const [loading, setLoading] = useState(true);
   const initializedRef = useRef(false);
+  const hasSessionRef = useRef(false);
 
   const fetchProfile = async (authId: string) => {
     const { data } = await supabase
@@ -71,11 +72,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
+        hasSessionRef.current = true;
         fetchProfile(s.user.id).finally(() => {
           initializedRef.current = true;
           setLoading(false);
         });
       } else {
+        hasSessionRef.current = false;
         initializedRef.current = true;
         setLoading(false);
       }
@@ -102,13 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // SIGNED_IN redundante após inicialização — ignorar para não resetar telas
-      if (event === 'SIGNED_IN' && initializedRef.current) return;
+      // SIGNED_IN redundante (já havia sessão ativa) — ignorar para não resetar telas
+      // Se hasSessionRef = false, é login real e deve ser processado
+      if (event === 'SIGNED_IN' && initializedRef.current && hasSessionRef.current) return;
 
-      // Primeiro login real (initializedRef ainda false) ou USER_UPDATED
+      // Login real ou USER_UPDATED
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
+        hasSessionRef.current = true;
         fetchProfile(s.user.id).finally(() => {
           initializedRef.current = true;
           setLoading(false);
