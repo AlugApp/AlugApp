@@ -747,6 +747,13 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
           <User className="w-6 h-6" />
           <span className="text-xs font-medium">Perfil</span>
         </button>
+        <button
+          onClick={() => signOut()}
+          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
+        >
+          <LogOut className="w-6 h-6" />
+          <span className="text-xs">Sair</span>
+        </button>
       </nav>
     </div>
   );

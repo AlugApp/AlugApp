@@ -89,17 +89,31 @@ const MfaChallenge: React.FC<{
 
 // ─── Conteúdo principal ───────────────────────────────────────────────────────
 
+const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar-perfil', 'my-announcements', 'edit-item'];
+
 const AppContent: React.FC = () => {
   const { session, loading, signOut, profile } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
-  const [mode, setMode] = useState<AppMode>('home');
+  const [mode, setMode] = useState<AppMode>(() => {
+    const saved = sessionStorage.getItem('app_mode') as AppMode | null;
+    return saved && VALID_MODES.includes(saved) ? saved : 'home';
+  });
   const [prevMode, setPrevMode] = useState<AppMode>('home');
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem('app_item_id');
+    return saved ? Number(saved) : null;
+  });
+
+  const navigate = (newMode: AppMode) => {
+    sessionStorage.setItem('app_mode', newMode);
+    setMode(newMode);
+  };
 
   const goToDetails = (id: number) => {
     setPrevMode(mode);
+    sessionStorage.setItem('app_item_id', String(id));
     setSelectedItemId(id);
-    setMode('details');
+    navigate('details');
   };
 
   // Estado de MFA pendente
@@ -201,50 +215,50 @@ const AppContent: React.FC = () => {
 
   // ── Autenticado — roteamento de telas ──
   if (mode === 'details' && selectedItemId !== null) {
-    return <ItemDetalhes id={selectedItemId} onGoBack={() => setMode(prevMode)} />;
+    return <ItemDetalhes id={selectedItemId} onGoBack={() => navigate(prevMode)} />;
   }
   if (mode === 'announce') {
-    return <AnunciarItem onGoBack={() => setMode('home')} />;
+    return <AnunciarItem onGoBack={() => navigate('home')} />;
   }
   if (mode === 'perfil') {
     return (
       <Perfil
-        onGoBack={() => setMode('home')}
-        onLogout={() => setMode('home')}
-        onGoToEditar={() => setMode('editar-perfil')}
-        onGoToMyAnnouncements={() => setMode('my-announcements')}
+        onGoBack={() => navigate('home')}
+        onLogout={() => navigate('home')}
+        onGoToEditar={() => navigate('editar-perfil')}
+        onGoToMyAnnouncements={() => navigate('my-announcements')}
       />
     );
   }
   if (mode === 'editar-perfil') {
     return (
       <EditarPerfil
-        onGoBack={() => setMode('perfil')}
-        onGoHome={() => setMode('home')}
-        onGoToMyAnnouncements={() => setMode('my-announcements')}
+        onGoBack={() => navigate('perfil')}
+        onGoHome={() => navigate('home')}
+        onGoToMyAnnouncements={() => navigate('my-announcements')}
       />
     );
   }
   if (mode === 'my-announcements') {
     return (
       <MeusAnuncios
-        onGoBack={() => setMode('home')}
-        onGoToPerfil={() => setMode('perfil')}
-        onGoToAnnounce={() => setMode('announce')}
+        onGoBack={() => navigate('home')}
+        onGoToPerfil={() => navigate('perfil')}
+        onGoToAnnounce={() => navigate('announce')}
         onOpenItem={(id) => goToDetails(id)}
-        onEditItem={(id) => { setSelectedItemId(id); setMode('edit-item'); }}
+        onEditItem={(id) => { sessionStorage.setItem('app_item_id', String(id)); setSelectedItemId(id); navigate('edit-item'); }}
       />
     );
   }
   if (mode === 'edit-item' && selectedItemId !== null) {
-    return <EditarItem id={selectedItemId} onGoBack={() => setMode('my-announcements')} />;
+    return <EditarItem id={selectedItemId} onGoBack={() => navigate('my-announcements')} />;
   }
 
   return (
     <Home
-      onGoToAnnounce={() => setMode('announce')}
-      onGoToPerfil={() => setMode('perfil')}
-      onGoToMyAnnouncements={() => setMode('my-announcements')}
+      onGoToAnnounce={() => navigate('announce')}
+      onGoToPerfil={() => navigate('perfil')}
+      onGoToMyAnnouncements={() => navigate('my-announcements')}
       onOpenItem={(id) => goToDetails(id)}
     />
   );

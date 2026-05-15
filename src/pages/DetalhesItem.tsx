@@ -19,11 +19,18 @@ const REGRAS = [
   { titulo: "Pagamento", texto: "O pagamento poderá ser processado pelo aplicativo ou diretamente ao responsável pelo item." },
 ];
 
+function parseSentinels(datas: string[]) {
+  return datas
+    .filter(d => d.startsWith("REC:"))
+    .map(d => Number(d.split(":")[1]));
+}
+
 function CalendarioLeitura({ datasIndisponiveis }: { datasIndisponiveis: string[] }) {
   const hoje = new Date();
   const [mesAtual, setMesAtual] = useState(hoje.getMonth());
   const [anoAtual, setAnoAtual] = useState(hoje.getFullYear());
 
+  const recorrentes = parseSentinels(datasIndisponiveis);
   const primeiroDia = new Date(anoAtual, mesAtual, 1).getDay();
   const totalDias = new Date(anoAtual, mesAtual + 1, 0).getDate();
   const toKey = (d: number) =>
@@ -65,7 +72,8 @@ function CalendarioLeitura({ datasIndisponiveis }: { datasIndisponiveis: string[
           if (!dia) return <div key={i} />;
           const key = toKey(dia);
           const passado = key < hojeStr;
-          const indisponivel = datasIndisponiveis.includes(key);
+          const diaSemana = new Date(anoAtual, mesAtual, dia).getDay();
+          const indisponivel = datasIndisponiveis.includes(key) || recorrentes.includes(diaSemana);
           return (
             <div
               key={i}
@@ -83,6 +91,15 @@ function CalendarioLeitura({ datasIndisponiveis }: { datasIndisponiveis: string[
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-green-50 border border-green-200 inline-block" /> Disponível</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-100 border border-red-200 inline-block" /> Indisponível</span>
       </div>
+      {recorrentes.length > 0 && (
+        <p className="text-[10px] text-gray-400 mt-1">
+          {recorrentes.includes(0) && recorrentes.includes(6)
+            ? "Finais de semana sempre indisponíveis."
+            : recorrentes.includes(6)
+            ? "Sábados sempre indisponíveis."
+            : "Domingos sempre indisponíveis."}
+        </p>
+      )}
     </div>
   );
 }
@@ -95,6 +112,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
   const [owner, setOwner] = useState<any>(null);
   const [ownerRating, setOwnerRating] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"info" | "indisponibilidade" | "regras">("info");
   const [showAluguel, setShowAluguel] = useState(false);
   const [aluguel, setAluguel] = useState({ inicio: "", fim: "", observacoes: "" });
   const [sending, setSending] = useState(false);
@@ -149,14 +167,21 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
 
   const datasIndisponiveis: string[] = Array.isArray(item?.datas_indisponiveis) ? item.datas_indisponiveis : [];
   const adicionais: string[] = Array.isArray(item?.adicionais) ? item.adicionais : [];
+  const recorrentes = parseSentinels(datasIndisponiveis);
 
   const rangeContemIndisponivel = (inicio: string, fim: string) => {
     if (!inicio || !fim) return false;
-    const start = new Date(inicio);
-    const end = new Date(fim);
+    const start = new Date(inicio + "T12:00:00");
+    const end = new Date(fim + "T12:00:00");
     for (const ds of datasIndisponiveis) {
-      const d = new Date(ds);
+      if (ds.startsWith("REC:")) continue;
+      const d = new Date(ds + "T12:00:00");
       if (d >= start && d <= end) return true;
+    }
+    if (recorrentes.length > 0) {
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (recorrentes.includes(d.getDay())) return true;
+      }
     }
     return false;
   };
@@ -240,20 +265,27 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
   }
 
   const calc = calcularTotal();
+  const diario = Number(item.valor_aluguel_diario);
+
+  const TABS = [
+    { key: "info", label: "Visão Geral" },
+    { key: "indisponibilidade", label: "Indisponibilidade" },
+    { key: "regras", label: "Regras" },
+  ] as const;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
 
       {/* HEADER */}
       <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
-        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
-        <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
+        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-16 h-16" />
+        <span className="text-xl font-bold text-blue-600 -ml-0">AlugApp</span>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
 
         {/* IMAGEM */}
-        <div className="relative w-5/12 flex-shrink-0 bg-white h-[calc(100vh-5rem-5rem)]">
+        <div className="relative w-5/12 flex-shrink-0 bg-white">
           <button
             onClick={onGoBack}
             className="absolute top-4 left-4 z-10 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center"
@@ -294,141 +326,204 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
           )}
         </div>
 
-        {/* DETALHES */}
-        <div className="flex-1 bg-white overflow-y-auto pb-28 px-8 py-6 space-y-5">
+        {/* PAINEL DIREITO */}
+        <div className="flex-1 bg-white flex flex-col overflow-hidden">
 
-          {/* Categoria */}
-          {item.categoria?.nome_categoria && (
-            <span className="inline-block bg-blue-50 text-blue-600 text-xs font-semibold px-3 py-1 rounded-full">
-              {item.categoria.nome_categoria}
-            </span>
-          )}
-
-          <h1 className="text-2xl font-bold text-gray-900">{item.nome}</h1>
-
-          {/* Avaliação do dono */}
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
-            <span className="text-gray-800 font-semibold">
-              {ownerRating !== null ? ownerRating : "Sem avaliações"}
-            </span>
+          {/* ABAS */}
+          <div className="flex border-b border-gray-100 flex-shrink-0">
+            {TABS.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`flex-1 py-3 text-sm font-semibold transition border-b-2 ${
+                  tab === key
+                    ? "text-blue-600 border-blue-600"
+                    : "text-gray-400 border-transparent hover:text-gray-600"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* Preços */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="border rounded-xl p-3 text-center">
-              <p className="text-xs text-gray-400 mb-1">Diária</p>
-              <p className="font-bold text-green-600">R$ {Number(item.valor_aluguel_diario).toFixed(2)}</p>
-            </div>
-            {item.valor_aluguel_semana && (
-              <div className="border rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-400 mb-1">Semanal</p>
-                <p className="font-bold text-green-600">R$ {Number(item.valor_aluguel_semana).toFixed(2)}</p>
-              </div>
-            )}
-            {item.valor_aluguel_mensal && (
-              <div className="border rounded-xl p-3 text-center">
-                <p className="text-xs text-gray-400 mb-1">Mensal</p>
-                <p className="font-bold text-green-600">R$ {Number(item.valor_aluguel_mensal).toFixed(2)}</p>
-              </div>
-            )}
-          </div>
+          {/* CONTEÚDO DA ABA */}
+          <div className="flex-1 overflow-hidden px-6 py-4">
 
-          {/* Card do Proprietário */}
-          <div className="flex items-center justify-between border rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-semibold text-gray-900">{owner?.fullName || "—"}</p>
-                <p className="text-sm text-gray-500">Proprietário</p>
-              </div>
-            </div>
-            <button className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-white" />
-            </button>
-          </div>
+            {/* ABA: VISÃO GERAL */}
+            {tab === "info" && (
+              <div className="h-full flex flex-col gap-3">
+                {/* Badges: categoria + estado */}
+                <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                  {item.categoria?.nome_categoria && (
+                    <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                      {item.categoria.nome_categoria}
+                    </span>
+                  )}
+                  {item.estado && (
+                    <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+                      {item.estado}
+                    </span>
+                  )}
+                </div>
 
-          {/* Descrição */}
-          {item.descricao && (() => {
-            const match = item.descricao.match(/^\[(.+?)\]\s*([\s\S]*)/);
-            const subtipo = match?.[1];
-            const texto = match ? match[2] : item.descricao;
-            return (
-              <div>
-                <h3 className="font-bold text-gray-900 mb-2">Descrição</h3>
-                {subtipo && (
-                  <span className="inline-block bg-blue-50 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full mb-2">{subtipo}</span>
-                )}
-                {texto && <p className="text-gray-500 text-sm leading-relaxed">{texto}</p>}
-              </div>
-            );
-          })()}
-
-          {/* Estado */}
-          {item.estado && (
-            <div>
-              <h3 className="font-bold text-gray-900 mb-2">Estado do item</h3>
-              <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-3 py-1 rounded-full">
-                {item.estado}
-              </span>
-            </div>
-          )}
-
-          {/* Adicionais */}
-          {adicionais.length > 0 && (
-            <div>
-              <h3 className="font-bold text-gray-900 mb-3">Adicionais</h3>
-              <div className="flex flex-wrap gap-2">
-                {adicionais.map((a) => (
-                  <span key={a} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-medium px-3 py-1.5 rounded-full">
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Disponibilidade */}
-          <div>
-            <h3 className="font-bold text-gray-900 mb-3">Disponibilidade</h3>
-            <CalendarioLeitura datasIndisponiveis={datasIndisponiveis} />
-          </div>
-
-          {/* Regras do Aluguel */}
-          <div>
-            <h3 className="font-bold text-gray-900 mb-3">Regras do aluguel</h3>
-            <ul className="space-y-3">
-              {REGRAS.map((r) => (
-                <li key={r.titulo} className="flex gap-3">
-                  <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0 mt-1.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{r.texto}</p>
+                {/* Título + Avaliação */}
+                <div className="flex-shrink-0">
+                  <h1 className="text-xl font-bold text-gray-900 leading-tight">{item.nome}</h1>
+                  <div className="flex items-center gap-1.5 mt-1 text-sm text-gray-500">
+                    <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
+                    <span className="text-gray-800 font-semibold">
+                      {ownerRating !== null ? ownerRating : "Sem avaliações"}
+                    </span>
                   </div>
-                </li>
-              ))}
-            </ul>
+                </div>
+
+                {/* Preços */}
+                {(() => {
+                  const semanal = item.valor_aluguel_semana ? Number(item.valor_aluguel_semana) : null;
+                  const mensal  = item.valor_aluguel_mensal ? Number(item.valor_aluguel_mensal) : null;
+                  const semanalBase = diario * 7;
+                  const mensalBase  = diario * 30;
+                  const pctSem = semanal && semanalBase > 0 ? Math.round((1 - semanal / semanalBase) * 100) : 0;
+                  const pctMen = mensal  && mensalBase  > 0 ? Math.round((1 - mensal  / mensalBase)  * 100) : 0;
+                  return (
+                    <div className="grid grid-cols-3 gap-2 flex-shrink-0">
+                      {/* Diária */}
+                      <div className="border border-gray-200 rounded-xl p-2.5 text-center">
+                        <p className="text-xs text-gray-400 mb-0.5">Diária</p>
+                        <p className="font-bold text-green-600 text-sm">R$ {diario.toFixed(2)}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">valor base</p>
+                      </div>
+
+                      {/* Semanal */}
+                      {semanal !== null && (
+                        <div className={`rounded-xl p-2.5 text-center relative ${pctSem > 0 ? "bg-blue-50 border border-blue-100" : "border border-gray-200"}`}>
+                          {pctSem > 0 && (
+                            <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              -{pctSem}% desc.
+                            </span>
+                          )}
+                          <p className={`text-xs mb-0.5 ${pctSem > 0 ? "text-blue-500" : "text-gray-400"}`}>Semanal</p>
+                          {pctSem > 0 && (
+                            <p className="text-[10px] text-gray-300 line-through leading-none">R$ {semanalBase.toFixed(2)}</p>
+                          )}
+                          <p className={`font-bold text-sm ${pctSem > 0 ? "text-blue-700" : "text-green-600"}`}>R$ {semanal.toFixed(2)}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">7 dias</p>
+                        </div>
+                      )}
+
+                      {/* Mensal */}
+                      {mensal !== null && (
+                        <div className={`rounded-xl p-2.5 text-center relative ${pctMen > 0 ? "bg-green-50 border border-green-100" : "border border-gray-200"}`}>
+                          {pctMen > 0 && (
+                            <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                              -{pctMen}% desc.
+                            </span>
+                          )}
+                          <p className={`text-xs mb-0.5 ${pctMen > 0 ? "text-green-600" : "text-gray-400"}`}>Mensal</p>
+                          {pctMen > 0 && (
+                            <p className="text-[10px] text-gray-300 line-through leading-none">R$ {mensalBase.toFixed(2)}</p>
+                          )}
+                          <p className={`font-bold text-sm ${pctMen > 0 ? "text-green-700" : "text-green-600"}`}>R$ {mensal.toFixed(2)}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">30 dias</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Proprietário */}
+                <div className="flex items-center justify-between border rounded-xl p-3 flex-shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 text-sm">{owner?.fullName || "—"}</p>
+                      <p className="text-xs text-gray-500">Proprietário</p>
+                    </div>
+                  </div>
+                  <button className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+
+                {/* Descrição */}
+                {item.descricao && (() => {
+                  const match = item.descricao.match(/^\[(.+?)\]\s*([\s\S]*)/);
+                  const subtipo = match?.[1];
+                  const texto = match ? match[2] : item.descricao;
+                  return (
+                    <div className="flex-shrink-0">
+                      <h3 className="font-bold text-gray-900 text-sm mb-1">Descrição</h3>
+                      {subtipo && (
+                        <span className="inline-block bg-blue-50 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full mb-1">{subtipo}</span>
+                      )}
+                      {texto && <p className="text-gray-500 text-xs leading-relaxed line-clamp-3">{texto}</p>}
+                    </div>
+                  );
+                })()}
+
+                {/* Adicionais */}
+                {adicionais.length > 0 && (
+                  <div className="flex-shrink-0">
+                    <h3 className="font-bold text-gray-900 text-sm mb-1.5">Adicionais</h3>
+                    <div className="flex flex-wrap gap-1.5">
+                      {adicionais.map((a) => (
+                        <span key={a} className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-1 rounded-full">
+                          <CheckCircle className="w-3 h-3" />
+                          {a}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ABA: INDISPONIBILIDADE */}
+            {tab === "indisponibilidade" && (
+              <div className="h-full flex flex-col gap-3">
+                <p className="text-xs text-gray-400 flex-shrink-0">
+                  Dias marcados em vermelho não estão disponíveis para aluguel.
+                </p>
+                <CalendarioLeitura datasIndisponiveis={datasIndisponiveis} />
+              </div>
+            )}
+
+            {/* ABA: REGRAS */}
+            {tab === "regras" && (
+              <div className="h-full overflow-y-auto">
+                <ul className="space-y-4">
+                  {REGRAS.map((r) => (
+                    <li key={r.titulo} className="flex gap-3">
+                      <span className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0 mt-1.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{r.titulo}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{r.texto}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* BARRA INFERIOR */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t px-8 py-4 flex items-center justify-between z-20">
+      <div className="bg-white border-t px-8 py-3 flex items-center justify-between flex-shrink-0">
         <div>
           <p className="text-xs text-gray-500">Valor por diária</p>
-          <p className="text-2xl font-bold text-green-600">R$ {Number(item.valor_aluguel_diario).toFixed(2)}</p>
+          <p className="text-xl font-bold text-green-600">R$ {diario.toFixed(2)}</p>
         </div>
         {user?.id === item.idlocador ? (
           <span className="text-sm text-gray-400 italic">Você é o proprietário</span>
         ) : (
           <button
             onClick={() => { setShowAluguel(true); setSendMsg(null); }}
-            className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-3 rounded-xl hover:bg-blue-700 transition"
+            className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-2.5 rounded-xl hover:bg-blue-700 transition"
           >
             <ShoppingBag className="w-5 h-5" />
             Alugar

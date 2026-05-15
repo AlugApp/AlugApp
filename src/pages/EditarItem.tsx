@@ -6,6 +6,16 @@ import { ArrowLeft, Plus, X, Loader2, ChevronLeft, ChevronRight } from "lucide-r
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
+const DIAS_RECORRENTES = [
+  { inicial: "D", nome: "Domingo",  sentinel: "REC:0" },
+  { inicial: "S", nome: "Segunda",  sentinel: "REC:1" },
+  { inicial: "T", nome: "Terça",    sentinel: "REC:2" },
+  { inicial: "Q", nome: "Quarta",   sentinel: "REC:3" },
+  { inicial: "Q", nome: "Quinta",   sentinel: "REC:4" },
+  { inicial: "S", nome: "Sexta",    sentinel: "REC:5" },
+  { inicial: "S", nome: "Sábado",   sentinel: "REC:6" },
+];
+
 function CalendarioDisponibilidade({ datasIndisponiveis, onChange }: { datasIndisponiveis: string[]; onChange: (d: string[]) => void }) {
   const hoje = new Date();
   const [mesAtual, setMesAtual] = useState(hoje.getMonth());
@@ -15,7 +25,16 @@ function CalendarioDisponibilidade({ datasIndisponiveis, onChange }: { datasIndi
   const toKey = (d: number) => `${anoAtual}-${String(mesAtual+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
   const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,"0")}-${String(hoje.getDate()).padStart(2,"0")}`;
   const cells: (number|null)[] = [...Array(primeiroDia).fill(null), ...Array.from({length:totalDias},(_,i)=>i+1)];
+
+  const recorrentes = datasIndisponiveis
+    .filter(d => d.startsWith("REC:"))
+    .map(d => Number(d.split(":")[1]));
+
   const toggleDia = (dia: number) => {
+    const d = new Date(anoAtual, mesAtual, dia);
+    if (d < new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate())) return;
+    const diaSemana = d.getDay();
+    if (recorrentes.includes(diaSemana)) return;
     const key = toKey(dia);
     onChange(datasIndisponiveis.includes(key) ? datasIndisponiveis.filter(x=>x!==key) : [...datasIndisponiveis, key]);
   };
@@ -32,9 +51,17 @@ function CalendarioDisponibilidade({ datasIndisponiveis, onChange }: { datasIndi
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map((dia,i)=>{
           if(!dia) return <div key={i}/>;
-          const key=toKey(dia), passado=key<hojeStr, indisponivel=datasIndisponiveis.includes(key);
-          return <button key={i} type="button" onClick={()=>!passado&&toggleDia(dia)} disabled={passado}
-            className={`h-6 rounded text-[10px] font-medium transition ${passado?"text-gray-300 cursor-not-allowed":indisponivel?"bg-red-100 text-red-600 border border-red-200":"bg-white border border-gray-200 hover:border-blue-300 text-gray-700"}`}>{dia}</button>;
+          const key=toKey(dia), passado=key<hojeStr;
+          const diaSemana = new Date(anoAtual, mesAtual, dia).getDay();
+          const ehRecorrente = recorrentes.includes(diaSemana);
+          const indisponivel = datasIndisponiveis.includes(key) || ehRecorrente;
+          return <button key={i} type="button" onClick={()=>toggleDia(dia)} disabled={passado||ehRecorrente}
+            title={ehRecorrente ? "Indisponível por regra recorrente" : undefined}
+            className={`h-6 rounded text-[10px] font-medium transition ${
+              passado?"text-gray-300 cursor-not-allowed":
+              ehRecorrente?"bg-red-100 text-red-400 border border-red-200 cursor-not-allowed":
+              indisponivel?"bg-red-100 text-red-600 border border-red-200":
+              "bg-white border border-gray-200 hover:border-blue-300 text-gray-700"}`}>{dia}</button>;
         })}
       </div>
       <div className="flex gap-4 mt-2 text-[10px] text-gray-400">
@@ -86,6 +113,8 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const [datasIndisponiveis, setDatasIndisponiveis] = useState<string[]>([]);
   const [fotos, setFotos] = useState<FotoDisplay[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [descontoSemanal, setDescontoSemanal] = useState("10");
+  const [descontoMensal, setDescontoMensal] = useState("20");
 
   const [formData, setFormData] = useState({
     nome: "",
@@ -120,6 +149,18 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       });
       setAdicionaisSelecionados(Array.isArray(item.adicionais) ? item.adicionais : []);
       setDatasIndisponiveis(Array.isArray(item.datas_indisponiveis) ? item.datas_indisponiveis : []);
+
+      // Recalcula o % de desconto a partir dos preços armazenados
+      const baseDiario = Number(item.valor_aluguel_diario);
+      if (baseDiario > 0 && item.valor_aluguel_semana) {
+        const pctSem = Math.round((1 - Number(item.valor_aluguel_semana) / (baseDiario * 7)) * 100);
+        setDescontoSemanal(String(Math.max(0, Math.min(99, pctSem))));
+      }
+      if (baseDiario > 0 && item.valor_aluguel_mensal) {
+        const pctMen = Math.round((1 - Number(item.valor_aluguel_mensal) / (baseDiario * 30)) * 100);
+        setDescontoMensal(String(Math.max(0, Math.min(99, pctMen))));
+      }
+
       setLoading(false);
     };
     load();
@@ -129,8 +170,10 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const isOutros = categoriaSelecionada?.nome_categoria?.toLowerCase() === "outros";
 
   const diario = Number(formData.valor_aluguel_diario) || 0;
-  const semanal = diario > 0 ? +(diario * 7 * 0.9).toFixed(2) : 0;
-  const mensal  = diario > 0 ? +(diario * 30 * 0.8).toFixed(2) : 0;
+  const semanalBase  = diario > 0 ? +(diario * 7).toFixed(2) : 0;
+  const mensalBase   = diario > 0 ? +(diario * 30).toFixed(2) : 0;
+  const semanalFinal = semanalBase > 0 ? +(semanalBase * (1 - (Number(descontoSemanal) || 0) / 100)).toFixed(2) : 0;
+  const mensalFinal  = mensalBase > 0  ? +(mensalBase  * (1 - (Number(descontoMensal)  || 0) / 100)).toFixed(2) : 0;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -168,10 +211,28 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
     );
   };
 
+  const toggleRecorrente = (sentinel: string) => {
+    const dayNum = Number(sentinel.split(":")[1]);
+    setDatasIndisponiveis((prev) => {
+      if (prev.includes(sentinel)) {
+        return prev.filter(d => d !== sentinel);
+      }
+      const semIndividuaisDoDia = prev.filter(d => {
+        if (d.startsWith("REC:")) return true;
+        return new Date(d + "T12:00:00").getDay() !== dayNum;
+      });
+      return [...semIndividuaisDoDia, sentinel];
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.estado || !formData.descricao.trim()) {
       setMsg({ type: "error", text: "Preencha todos os campos obrigatórios." });
+      return;
+    }
+    if (diario <= 0) {
+      setMsg({ type: "error", text: "O valor por diária deve ser maior que R$ 0,00." });
       return;
     }
     if (isOutros && !outraCategoria.trim()) {
@@ -192,8 +253,8 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
         descricao: descricaoFinal,
         idcategoria: Number(formData.idcategoria),
         valor_aluguel_diario: diario,
-        valor_aluguel_semana: semanal,
-        valor_aluguel_mensal: mensal,
+        valor_aluguel_semana: semanalFinal,
+        valor_aluguel_mensal: mensalFinal,
         estado: formData.estado || null,
         adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
         datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : null,
@@ -210,14 +271,14 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
 
     setUploading(true);
 
-    // Passo 1: mover fotos existentes para offset alto para evitar conflito de unique constraint
+    // Mover fotos existentes para offset alto para evitar conflito de unique constraint
     for (let i = 0; i < fotos.length; i++) {
       if (fotos[i].kind === "existing") {
         await supabase.from("fotoitem").update({ ordem_exibicao: 1000 + i }).eq("idfoto", (fotos[i] as any).id);
       }
     }
 
-    // Passo 2: definir a ordem final e fazer upload de novas fotos
+    // Definir ordem final e fazer upload de novas fotos
     for (let i = 0; i < fotos.length; i++) {
       const foto = fotos[i];
       if (foto.kind === "existing") {
@@ -352,33 +413,111 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
             {/* PREÇOS */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
               <h2 className="font-bold text-gray-900">Preços</h2>
+              <p className="text-xs text-gray-400">Informe o valor por diária. Os valores semanal e mensal são calculados automaticamente. Ajuste o desconto de cada período conforme desejar. Use 0% para sem desconto.</p>
+
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor por diária (R$) <span className="text-red-500">*</span></label>
                 <input type="number" name="valor_aluguel_diario" value={formData.valor_aluguel_diario}
-                  onChange={handleChange} placeholder="0,00" min="0" step="0.01"
+                  onChange={handleChange} placeholder="0,00" min="0.01" step="0.01"
                   className={`${inputClass} mt-1`} required />
+                {formData.valor_aluguel_diario && diario <= 0 && (
+                  <p className="text-xs text-red-500 mt-1">O valor deve ser maior que R$ 0,00.</p>
+                )}
               </div>
+
               {diario > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-blue-100 rounded-xl p-3 text-center">
-                    <p className="text-xs text-blue-400 font-semibold mb-1">Semanal (10% desc.)</p>
-                    <p className="text-lg font-bold text-blue-700">R$ {semanal.toFixed(2)}</p>
-                    <p className="text-xs text-blue-400">= {diario.toFixed(2)} × 7 dias</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Diária */}
+                  <div className="border border-gray-200 rounded-xl p-3 text-center flex flex-col gap-1">
+                    <p className="text-xs text-gray-500 font-semibold">Diária</p>
+                    <p className="text-lg font-bold text-green-600">R$ {diario.toFixed(2)}</p>
+                    <p className="text-[10px] text-gray-400">Valor base</p>
                   </div>
-                  <div className="bg-green-100 rounded-xl p-3 text-center">
-                    <p className="text-xs text-green-500 font-semibold mb-1">Mensal (20% desc.)</p>
-                    <p className="text-lg font-bold text-green-700">R$ {mensal.toFixed(2)}</p>
-                    <p className="text-xs text-green-500">= {diario.toFixed(2)} × 30 dias</p>
+
+                  {/* Semanal */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex flex-col gap-1">
+                    <p className="text-xs text-blue-600 font-semibold text-center">Semanal</p>
+                    <p className="text-[10px] text-gray-400 text-center">Base: R$ {semanalBase.toFixed(2)}</p>
+                    <div className="flex items-center gap-1 justify-center">
+                      <span className="text-[10px] text-gray-500">Desc:</span>
+                      <input
+                        type="number" min="0" max="99"
+                        value={descontoSemanal}
+                        onChange={(e) => setDescontoSemanal(e.target.value)}
+                        className="w-11 text-center text-xs border border-blue-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      />
+                      <span className="text-[10px] text-gray-500">%</span>
+                    </div>
+                    <p className="text-base font-bold text-blue-700 text-center">R$ {semanalFinal.toFixed(2)}</p>
+                  </div>
+
+                  {/* Mensal */}
+                  <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex flex-col gap-1">
+                    <p className="text-xs text-green-600 font-semibold text-center">Mensal</p>
+                    <p className="text-[10px] text-gray-400 text-center">Base: R$ {mensalBase.toFixed(2)}</p>
+                    <div className="flex items-center gap-1 justify-center">
+                      <span className="text-[10px] text-gray-500">Desc:</span>
+                      <input
+                        type="number" min="0" max="99"
+                        value={descontoMensal}
+                        onChange={(e) => setDescontoMensal(e.target.value)}
+                        className="w-11 text-center text-xs border border-green-200 rounded px-1 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-green-400"
+                      />
+                      <span className="text-[10px] text-gray-500">%</span>
+                    </div>
+                    <p className="text-base font-bold text-green-700 text-center">R$ {mensalFinal.toFixed(2)}</p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* DISPONIBILIDADE */}
+            {/* INDISPONIBILIDADE */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-              <h2 className="font-bold text-gray-900 mb-1">Disponibilidade</h2>
-              <p className="text-xs text-gray-400 mb-4">Clique nos dias em que o item <strong>não</strong> estará disponível.</p>
+              <h2 className="font-bold text-gray-900 mb-1">Indisponibilidade</h2>
+              <p className="text-xs text-gray-400 mb-4">Clique nos dias em que o item estará indisponível para aluguel.</p>
               <CalendarioDisponibilidade datasIndisponiveis={datasIndisponiveis} onChange={setDatasIndisponiveis} />
+              {(() => {
+                const recDays = datasIndisponiveis.filter(d => d.startsWith("REC:")).map(d => Number(d.split(":")[1]));
+                const especificas = datasIndisponiveis.filter(d => {
+                  if (d.startsWith("REC:")) return false;
+                  return !recDays.includes(new Date(d + "T12:00:00").getDay());
+                });
+                return especificas.length > 0 ? (
+                  <p className="text-xs text-red-500 mt-3">
+                    {especificas.length} data(s) específica(s) marcada(s) como indisponível.
+                  </p>
+                ) : null;
+              })()}
+
+              {/* Recorrência */}
+              <div className="mt-5 border-t border-gray-100 pt-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Indisponibilidade recorrente</p>
+                <div className="flex gap-1.5">
+                  {DIAS_RECORRENTES.map(({ inicial, nome, sentinel }) => {
+                    const ativo = datasIndisponiveis.includes(sentinel);
+                    return (
+                      <button
+                        key={sentinel}
+                        type="button"
+                        title={nome}
+                        onClick={() => toggleRecorrente(sentinel)}
+                        className={`w-9 h-9 rounded-lg text-sm font-bold transition select-none ${
+                          ativo
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "bg-gray-700 text-white hover:bg-gray-600"
+                        }`}
+                      >
+                        {inicial}
+                      </button>
+                    );
+                  })}
+                </div>
+                {DIAS_RECORRENTES.some(d => datasIndisponiveis.includes(d.sentinel)) && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    {DIAS_RECORRENTES.filter(d => datasIndisponiveis.includes(d.sentinel)).map(d => d.nome).join(", ")} bloqueado(s) semanalmente.
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* ADICIONAIS */}

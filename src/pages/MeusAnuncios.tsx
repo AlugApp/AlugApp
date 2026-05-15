@@ -8,6 +8,7 @@ import {
   MessageSquare,
   User,
   Trash2,
+  LogOut,
 } from "lucide-react";
 
 interface MeusAnunciosProps {
@@ -29,7 +30,7 @@ interface Item {
 }
 
 export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, onOpenItem, onEditItem }: MeusAnunciosProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -221,6 +222,13 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
         >
           <User className="w-6 h-6" />
           <span className="text-xs">Perfil</span>
+        </button>
+        <button
+          onClick={() => signOut()}
+          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
+        >
+          <LogOut className="w-6 h-6" />
+          <span className="text-xs">Sair</span>
         </button>
       </nav>
     </div>

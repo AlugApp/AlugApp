@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import {
   Package,
   Search, SlidersHorizontal, X,
-  Home as HomeIcon, MessageSquare, User, PlusCircle, CirclePlus,
+  Home as HomeIcon, MessageSquare, User, PlusCircle, CirclePlus, LogOut,
 } from "lucide-react";
 
 
@@ -51,6 +52,7 @@ interface Categoria {
 }
 
 export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem }: HomeProps) {
+  const { signOut } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
@@ -437,6 +439,13 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
         >
           <User className="w-6 h-6" />
           <span className="text-xs">Perfil</span>
+        </button>
+        <button
+          onClick={() => signOut()}
+          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
+        >
+          <LogOut className="w-6 h-6" />
+          <span className="text-xs">Sair</span>
         </button>
       </nav>
     </div>
