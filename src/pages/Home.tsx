@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { useGeolocation } from "../hooks/useGeolocation";
+import { haversineKm } from "../lib/geocoding";
 import {
   Package,
-  Search, SlidersHorizontal, X, CirclePlus, Bell
+  Search, SlidersHorizontal, X, CirclePlus, Bell,
+  MapPin, LocateFixed, Loader2,
 } from "lucide-react";
 
 
@@ -30,6 +33,8 @@ interface Item {
   locador_nome?: string;
   locador_apto?: string;
   locador_bloco?: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 type Periodo = "diario" | "semanal" | "mensal";
@@ -52,12 +57,16 @@ interface Categoria {
   nome_categoria: string;
 }
 
+const RAIOS_KM = [1, 3, 5, 10] as const;
+
 export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem, onGoToDashboard, onGoToChat }: HomeProps) {
   const [items, setItems] = useState<Item[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
   const [notificacoesCount, setNotificacoesCount] = useState(0);
+
+  const { latitude: userLat, longitude: userLon, loading: locLoading, error: locError, requestLocation, clearLocation } = useGeolocation();
 
   const [categoryFilter, setCategoryFilter] = useState(() => sessionStorage.getItem("h_cat") || "todas");
   const [searchText, setSearchText] = useState(() => sessionStorage.getItem("h_search") || "");
@@ -68,6 +77,10 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   const [dataFim, setDataFim] = useState(() => sessionStorage.getItem("h_dataFim") || "");
   const [ordenacao, setOrdenacao] = useState<Ordenacao>(() => (sessionStorage.getItem("h_ordenacao") as Ordenacao) || "recente");
   const [showFiltros, setShowFiltros] = useState(() => sessionStorage.getItem("h_showFiltros") === "true");
+  const [proximoRaio, setProximoRaio] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem("h_proximoRaio");
+    return saved ? Number(saved) : null;
+  });
 
   const campoPrecoDB: Record<Periodo, string> = {
     diario: "valor_aluguel_diario",
@@ -115,6 +128,15 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     setLoading(false);
   };
 
+  // Filtragem de proximidade client-side sobre os itens já carregados
+  const displayedItems = useMemo(() => {
+    if (!proximoRaio || userLat == null || userLon == null) return items;
+    return items.filter(item => {
+      if (item.latitude == null || item.longitude == null) return false;
+      return haversineKm(userLat, userLon, item.latitude, item.longitude) <= proximoRaio;
+    });
+  }, [items, proximoRaio, userLat, userLon]);
+
   useEffect(() => {
     if (profile?.id) {
       supabase
@@ -149,13 +171,35 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     sessionStorage.setItem("h_showFiltros", String(showFiltros));
   }, [showFiltros]);
 
-  const temFiltroAtivo = !!(searchText || precoMin || precoMax || dataInicio || dataFim || categoryFilter !== "todas");
+  useEffect(() => {
+    if (proximoRaio !== null) {
+      sessionStorage.setItem("h_proximoRaio", String(proximoRaio));
+    } else {
+      sessionStorage.removeItem("h_proximoRaio");
+    }
+  }, [proximoRaio]);
+
+  // Quando o filtro de proximidade é ativado com sessão anterior salva, pede a localização
+  useEffect(() => {
+    if (proximoRaio && userLat == null && !locLoading) {
+      requestLocation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const temFiltroAtivo = !!(searchText || precoMin || precoMax || dataInicio || dataFim || categoryFilter !== "todas" || proximoRaio);
 
   const limparFiltros = () => {
     setSearchText(""); setPrecoMin(""); setPrecoMax("");
     setDataInicio(""); setDataFim("");
     setCategoryFilter("todas"); setOrdenacao("recente"); setPeriodo("diario");
-    ["h_cat","h_search","h_periodo","h_precoMin","h_precoMax","h_dataInicio","h_dataFim","h_ordenacao"].forEach(k => sessionStorage.removeItem(k));
+    setProximoRaio(null); clearLocation();
+    ["h_cat","h_search","h_periodo","h_precoMin","h_precoMax","h_dataInicio","h_dataFim","h_ordenacao","h_proximoRaio"].forEach(k => sessionStorage.removeItem(k));
+  };
+
+  const ativarProximidade = (raio: number) => {
+    setProximoRaio(raio);
+    requestLocation();
   };
 
   return (
@@ -168,7 +212,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
           <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
         </div>
         <div className="flex items-center gap-4">
-          <button 
+          <button
             className="relative text-gray-400 hover:text-blue-600 transition"
             onClick={onGoToChat}
           >
@@ -300,6 +344,79 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
               </div>
             </div>
 
+            {/* LOCALIZAÇÃO */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Localização
+              </label>
+              {!proximoRaio ? (
+                <button
+                  type="button"
+                  onClick={() => ativarProximidade(5)}
+                  disabled={locLoading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 hover:border-blue-400 hover:text-blue-600 transition w-full justify-center disabled:opacity-60"
+                >
+                  {locLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    : <LocateFixed className="w-4 h-4 text-blue-500" />
+                  }
+                  {locLoading ? "Obtendo localização..." : "Anúncios próximos a mim"}
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
+                    {locLoading
+                      ? <Loader2 className="w-4 h-4 animate-spin text-blue-500 flex-shrink-0" />
+                      : <LocateFixed className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                    }
+                    <span className="text-sm text-blue-700 font-medium flex-1">
+                      {locLoading
+                        ? "Obtendo localização..."
+                        : userLat != null
+                        ? "Localização ativa"
+                        : "Aguardando permissão..."}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { setProximoRaio(null); clearLocation(); }}
+                      className="text-blue-400 hover:text-red-500 transition"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {locError && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
+                      <MapPin className="w-3 h-3 flex-shrink-0" />
+                      {locError}
+                    </p>
+                  )}
+
+                  {userLat != null && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1.5">Raio de busca:</p>
+                      <div className="flex gap-2">
+                        {RAIOS_KM.map(km => (
+                          <button
+                            key={km}
+                            type="button"
+                            onClick={() => setProximoRaio(km)}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition ${
+                              proximoRaio === km
+                                ? "bg-blue-700 text-white border-blue-700"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-blue-400"
+                            }`}
+                          >
+                            {km} km
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {temFiltroAtivo && (
               <button onClick={limparFiltros} className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 font-medium">
                 <X className="w-4 h-4" /> Limpar todos os filtros
@@ -359,6 +476,31 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
                 <button onClick={() => setOrdenacao("recente")}><X className="w-3 h-3" /></button>
               </span>
             )}
+            {proximoRaio && (
+              <span className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                <MapPin className="w-3 h-3" />
+                Até {proximoRaio} km
+                <button onClick={() => { setProximoRaio(null); clearLocation(); }}><X className="w-3 h-3" /></button>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* AVISO: filtro de proximidade ativo mas sem localização */}
+        {proximoRaio && userLat == null && !locLoading && locError && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <MapPin className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-yellow-700 font-medium">Localização indisponível</p>
+              <p className="text-xs text-yellow-600 truncate">{locError}</p>
+            </div>
+            <button
+              type="button"
+              onClick={requestLocation}
+              className="text-xs text-yellow-700 font-semibold underline flex-shrink-0"
+            >
+              Tentar novamente
+            </button>
           </div>
         )}
 
@@ -384,11 +526,15 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
               <div key={i} className="h-80 bg-gray-200 animate-pulse rounded-2xl" />
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : displayedItems.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-2xl border border-gray-200">
             <Package className="w-14 h-14 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-gray-800 mb-1">Nenhum item encontrado</h3>
-            <p className="text-gray-400 text-sm mb-4">Tente ajustar os filtros</p>
+            <p className="text-gray-400 text-sm mb-4">
+              {proximoRaio && userLat != null
+                ? `Sem anúncios em até ${proximoRaio} km da sua localização`
+                : "Tente ajustar os filtros"}
+            </p>
             {temFiltroAtivo && (
               <button onClick={limparFiltros} className="text-blue-600 hover:underline text-sm font-medium">
                 Limpar filtros
@@ -397,8 +543,11 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {items.map((item) => {
+            {displayedItems.map((item) => {
               const preco = item[CAMPO_PRECO[periodo]] as number;
+              const distancia = userLat != null && userLon != null && item.latitude != null && item.longitude != null
+                ? haversineKm(userLat, userLon, item.latitude, item.longitude)
+                : null;
               return (
                 <div key={item.iditem} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition">
                   <div className="aspect-square w-full overflow-hidden bg-gray-100 relative">
@@ -415,6 +564,12 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
                     {item.nome_categoria && (
                       <span className="absolute top-2 left-2 bg-white/90 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
                         {item.nome_categoria}
+                      </span>
+                    )}
+                    {distancia != null && (
+                      <span className="absolute top-2 right-2 bg-white/90 text-gray-600 text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm flex items-center gap-0.5">
+                        <MapPin className="w-3 h-3 text-blue-500" />
+                        {distancia < 1 ? `${Math.round(distancia * 1000)} m` : `${distancia.toFixed(1)} km`}
                       </span>
                     )}
                   </div>

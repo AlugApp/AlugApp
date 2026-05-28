@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { geocodeAddress, buildAddressQuery } from "../lib/geocoding";
 import { ArrowLeft, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Categoria {
@@ -140,7 +141,7 @@ function CalendarioDisponibilidade({
 }
 
 export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -245,6 +246,16 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     setSubmitting(true);
     setMsg(null);
 
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    if (profile) {
+      const query = buildAddressQuery(profile);
+      if (query) {
+        const coords = await geocodeAddress(query);
+        if (coords) { latitude = coords.latitude; longitude = coords.longitude; }
+      }
+    }
+
     const { data: itemCreated, error } = await supabase
       .from("item")
       .insert([{
@@ -260,6 +271,8 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
         estado: formData.estado || null,
         adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
         datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : null,
+        latitude,
+        longitude,
       }])
       .select()
       .single();

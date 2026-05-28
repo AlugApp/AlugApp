@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { geocodeAddress, buildAddressQuery } from "../lib/geocoding";
 import { ArrowLeft, Plus, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -102,7 +103,7 @@ const ADICIONAIS_OPCOES = [
 
 
 export default function EditarItem({ id, onGoBack }: EditarItemProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -246,6 +247,16 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       ? `[${outraCategoria.trim()}] ${formData.descricao}`.trim()
       : formData.descricao;
 
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    if (profile) {
+      const query = buildAddressQuery(profile);
+      if (query) {
+        const coords = await geocodeAddress(query);
+        if (coords) { latitude = coords.latitude; longitude = coords.longitude; }
+      }
+    }
+
     const { data, error: updateError } = await supabase
       .from("item")
       .update({
@@ -258,6 +269,7 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
         estado: formData.estado || null,
         adicionais: adicionaisSelecionados.length > 0 ? adicionaisSelecionados : null,
         datas_indisponiveis: datasIndisponiveis.length > 0 ? datasIndisponiveis : null,
+        ...(latitude !== null && { latitude, longitude }),
       })
       .eq("iditem", id)
       .eq("idlocador", user!.id)
