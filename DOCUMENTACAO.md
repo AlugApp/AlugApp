@@ -500,7 +500,7 @@ Locador abre Chat
 O projeto é publicado na **Vercel**. O arquivo `vercel.json` configura redirecionamento de todas as rotas para `index.html` (necessário para SPA sem React Router).
 
 ```json
-// vercel.json (inferido pela configuração)
+// vercel.json
 { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
 ```
 
