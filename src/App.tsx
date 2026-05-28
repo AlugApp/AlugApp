@@ -13,10 +13,13 @@ import RedefinirSenha from './pages/RedefinirSenha';
 import MeusAnuncios from './pages/MeusAnuncios';
 import EditarItem from './pages/EditarItem';
 import CompletarPerfil from './pages/CompletarPerfil';
+import Dashboard from './pages/Dashboard';
+import Chat from './pages/Chat';
+import BottomNav from './components/BottomNav';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item';
+type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat';
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'update-password';
 
 // ─── Tela de verificação MFA (AAL2) ──────────────────────────────────────────
@@ -89,7 +92,7 @@ const MfaChallenge: React.FC<{
 
 // ─── Conteúdo principal ───────────────────────────────────────────────────────
 
-const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar-perfil', 'my-announcements', 'edit-item'];
+const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar-perfil', 'my-announcements', 'edit-item', 'dashboard', 'chat'];
 
 const AppContent: React.FC = () => {
   const { session, loading, signOut, profile } = useAuth();
@@ -213,54 +216,82 @@ const AppContent: React.FC = () => {
   }
 
 
-  // ── Autenticado — roteamento de telas ──
-  if (mode === 'details' && selectedItemId !== null) {
-    return <ItemDetalhes id={selectedItemId} onGoBack={() => navigate(prevMode)} />;
-  }
-  if (mode === 'announce') {
-    return <AnunciarItem onGoBack={() => navigate('home')} />;
-  }
-  if (mode === 'perfil') {
+  const renderContent = () => {
+    if (mode === 'details' && selectedItemId !== null) {
+      return <ItemDetalhes id={selectedItemId} onGoBack={() => navigate(prevMode)} />;
+    }
+    if (mode === 'announce') {
+      return <AnunciarItem onGoBack={() => navigate('home')} />;
+    }
+    if (mode === 'perfil') {
+      return (
+        <Perfil
+          onGoBack={() => navigate('home')}
+          onLogout={() => navigate('home')}
+          onGoToEditar={() => navigate('editar-perfil')}
+          onGoToMyAnnouncements={() => navigate('my-announcements')}
+        />
+      );
+    }
+    if (mode === 'editar-perfil') {
+      return (
+        <EditarPerfil
+          onGoBack={() => navigate('perfil')}
+          onGoHome={() => navigate('home')}
+          onGoToMyAnnouncements={() => navigate('my-announcements')}
+        />
+      );
+    }
+    if (mode === 'my-announcements') {
+      return (
+        <MeusAnuncios
+          onGoBack={() => navigate('home')}
+          onGoToPerfil={() => navigate('perfil')}
+          onGoToAnnounce={() => navigate('announce')}
+          onOpenItem={(id) => goToDetails(id)}
+          onEditItem={(id) => { sessionStorage.setItem('app_item_id', String(id)); setSelectedItemId(id); navigate('edit-item'); }}
+        />
+      );
+    }
+    if (mode === 'edit-item' && selectedItemId !== null) {
+      return <EditarItem id={selectedItemId} onGoBack={() => navigate('my-announcements')} />;
+    }
+    if (mode === 'dashboard') {
+      return (
+        <Dashboard
+          onGoHome={() => navigate('home')}
+          onGoToPerfil={() => navigate('perfil')}
+          onGoToMyAnnouncements={() => navigate('my-announcements')}
+        />
+      );
+    }
+    if (mode === 'chat') {
+      return (
+        <Chat
+          onGoBack={() => navigate('home')}
+          onGoToPerfil={() => navigate('perfil')}
+          onGoToMyAnnouncements={() => navigate('my-announcements')}
+        />
+      );
+    }
+
     return (
-      <Perfil
-        onGoBack={() => navigate('home')}
-        onLogout={() => navigate('home')}
-        onGoToEditar={() => navigate('editar-perfil')}
-        onGoToMyAnnouncements={() => navigate('my-announcements')}
-      />
-    );
-  }
-  if (mode === 'editar-perfil') {
-    return (
-      <EditarPerfil
-        onGoBack={() => navigate('perfil')}
-        onGoHome={() => navigate('home')}
-        onGoToMyAnnouncements={() => navigate('my-announcements')}
-      />
-    );
-  }
-  if (mode === 'my-announcements') {
-    return (
-      <MeusAnuncios
-        onGoBack={() => navigate('home')}
-        onGoToPerfil={() => navigate('perfil')}
+      <Home
         onGoToAnnounce={() => navigate('announce')}
+        onGoToPerfil={() => navigate('perfil')}
+        onGoToMyAnnouncements={() => navigate('my-announcements')}
         onOpenItem={(id) => goToDetails(id)}
-        onEditItem={(id) => { sessionStorage.setItem('app_item_id', String(id)); setSelectedItemId(id); navigate('edit-item'); }}
+        onGoToDashboard={() => navigate('dashboard')}
+        onGoToChat={() => navigate('chat')}
       />
     );
-  }
-  if (mode === 'edit-item' && selectedItemId !== null) {
-    return <EditarItem id={selectedItemId} onGoBack={() => navigate('my-announcements')} />;
-  }
+  };
 
   return (
-    <Home
-      onGoToAnnounce={() => navigate('announce')}
-      onGoToPerfil={() => navigate('perfil')}
-      onGoToMyAnnouncements={() => navigate('my-announcements')}
-      onOpenItem={(id) => goToDetails(id)}
-    />
+    <>
+      {renderContent()}
+      <BottomNav mode={mode} navigate={navigate} />
+    </>
   );
 };
 

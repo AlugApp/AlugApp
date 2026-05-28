@@ -228,7 +228,8 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
     }]);
 
     if (error) {
-      setSendMsg({ type: "error", text: "Erro ao enviar solicitação. Tente novamente." });
+      console.error("Erro no insert da solicitação:", error);
+      setSendMsg({ type: "error", text: `Erro ao enviar solicitação: ${error.message}` });
     } else {
       setSendMsg({ type: "success", text: "Solicitação enviada com sucesso!" });
       setTimeout(() => { setShowAluguel(false); setSendMsg(null); setAluguel({ inicio: "", fim: "", observacoes: "" }); }, 1800);
@@ -274,7 +275,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
   ] as const;
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden pb-32">
 
       {/* HEADER */}
       <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
@@ -513,7 +514,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
       </div>
 
       {/* BARRA INFERIOR */}
-      <div className="bg-white border-t px-8 py-3 flex items-center justify-between flex-shrink-0">
+      <div className="fixed bottom-16 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between z-40 shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
         <div>
           <p className="text-xs text-gray-500">Valor por diária</p>
           <p className="text-xl font-bold text-green-600">R$ {diario.toFixed(2)}</p>
@@ -523,7 +524,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
         ) : (
           <button
             onClick={() => { setShowAluguel(true); setSendMsg(null); }}
-            className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-2.5 rounded-xl hover:bg-blue-700 transition"
+            className="flex items-center gap-2 bg-blue-600 text-white font-semibold px-8 py-2.5 rounded-xl hover:bg-blue-700 transition shadow-sm"
           >
             <ShoppingBag className="w-5 h-5" />
             Alugar

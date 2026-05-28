@@ -3,8 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Package,
-  Search, SlidersHorizontal, X,
-  Home as HomeIcon, MessageSquare, User, PlusCircle, CirclePlus, LogOut,
+  Search, SlidersHorizontal, X, CirclePlus, Bell
 } from "lucide-react";
 
 
@@ -13,6 +12,8 @@ interface HomeProps {
   onGoToPerfil: () => void;
   onGoToMyAnnouncements: () => void;
   onOpenItem: (id: number) => void;
+  onGoToDashboard: () => void;
+  onGoToChat: () => void;
 }
 
 interface Item {
@@ -51,11 +52,12 @@ interface Categoria {
   nome_categoria: string;
 }
 
-export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem }: HomeProps) {
-  const { signOut } = useAuth();
+export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncements, onOpenItem, onGoToDashboard, onGoToChat }: HomeProps) {
   const [items, setItems] = useState<Item[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
+  const { profile } = useAuth();
+  const [notificacoesCount, setNotificacoesCount] = useState(0);
 
   const [categoryFilter, setCategoryFilter] = useState(() => sessionStorage.getItem("h_cat") || "todas");
   const [searchText, setSearchText] = useState(() => sessionStorage.getItem("h_search") || "");
@@ -114,6 +116,17 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   };
 
   useEffect(() => {
+    if (profile?.id) {
+      supabase
+        .from("solicitacao_aluguel")
+        .select("idsolicitacao", { count: "exact", head: true })
+        .eq("idlocador", profile.id)
+        .eq("status", "pendente")
+        .then(({ count }) => setNotificacoesCount(count || 0));
+    }
+  }, [profile?.id]);
+
+  useEffect(() => {
     supabase.from("categoria").select("*").order("nome_categoria").then(({ data }) => {
       if (data) setCategorias(data);
     });
@@ -149,18 +162,31 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     <div className="min-h-screen bg-gray-100 pb-20">
 
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex justify-between items-center shadow-sm">
+      <header className="bg-white px-0 py-0 flex justify-between items-center shadow-sm pr-4">
         <div className="flex items-center">
           <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
           <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
         </div>
-        <button
-          onClick={onGoToAnnounce}
-          className="flex items-center gap-2 bg-blue-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 transition"
-        >
-          <CirclePlus className="w-5 h-5" />
-          Anunciar Item
-        </button>
+        <div className="flex items-center gap-4">
+          <button 
+            className="relative text-gray-400 hover:text-blue-600 transition"
+            onClick={onGoToChat}
+          >
+            <Bell className="w-6 h-6" />
+            {notificacoesCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                {notificacoesCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={onGoToAnnounce}
+            className="flex items-center gap-2 bg-blue-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 transition"
+          >
+            <CirclePlus className="w-5 h-5" />
+            Anunciar Item
+          </button>
+        </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
@@ -416,38 +442,6 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
         )}
       </div>
 
-      {/* BOTTOM NAVIGATION */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex justify-around items-center px-4">
-        <button className="flex flex-col items-center gap-0.5 text-blue-600">
-          <HomeIcon className="w-6 h-6" aria-hidden="true" />
-          <span className="text-xs font-medium">Início</span>
-        </button>
-        <button
-          onClick={onGoToMyAnnouncements}
-          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
-        >
-          <PlusCircle className="w-6 h-6" />
-          <span className="text-xs">Meus Anúncios</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <MessageSquare className="w-6 h-6" />
-          <span className="text-xs">Chat</span>
-        </button>
-        <button
-          onClick={onGoToPerfil}
-          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
-        >
-          <User className="w-6 h-6" />
-          <span className="text-xs">Perfil</span>
-        </button>
-        <button
-          onClick={() => signOut()}
-          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
-        >
-          <LogOut className="w-6 h-6" />
-          <span className="text-xs">Sair</span>
-        </button>
-      </nav>
     </div>
   );
 }

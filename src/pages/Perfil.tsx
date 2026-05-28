@@ -726,35 +726,6 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
         </div>
       )}
 
-      {/* BOTTOM NAV */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex justify-around items-center px-4 z-20">
-        <button onClick={onGoBack} className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <HomeIcon className="w-6 h-6" />
-          <span className="text-xs">Início</span>
-        </button>
-        <button
-          onClick={onGoToMyAnnouncements}
-          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
-        >
-          <PlusCircle className="w-6 h-6" />
-          <span className="text-xs">Meus Anúncios</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <MessageSquare className="w-6 h-6" />
-          <span className="text-xs">Chat</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-blue-600">
-          <User className="w-6 h-6" />
-          <span className="text-xs font-medium">Perfil</span>
-        </button>
-        <button
-          onClick={() => signOut()}
-          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
-        >
-          <LogOut className="w-6 h-6" />
-          <span className="text-xs">Sair</span>
-        </button>
-      </nav>
     </div>
   );
 }

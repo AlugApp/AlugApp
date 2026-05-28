@@ -202,35 +202,6 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
         )}
       </div>
 
-      {/* BOTTOM NAVIGATION */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 h-16 flex justify-around items-center px-4">
-        <button onClick={onGoBack} className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <HomeIcon className="w-6 h-6" />
-          <span className="text-xs">Início</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-blue-600">
-          <PlusCircle className="w-6 h-6" />
-          <span className="text-xs font-medium">Meus Anúncios</span>
-        </button>
-        <button className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition">
-          <MessageSquare className="w-6 h-6" />
-          <span className="text-xs">Chat</span>
-        </button>
-        <button
-          onClick={onGoToPerfil}
-          className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-gray-600 transition"
-        >
-          <User className="w-6 h-6" />
-          <span className="text-xs">Perfil</span>
-        </button>
-        <button
-          onClick={() => signOut()}
-          className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
-        >
-          <LogOut className="w-6 h-6" />
-          <span className="text-xs">Sair</span>
-        </button>
-      </nav>
     </div>
   );
 }
