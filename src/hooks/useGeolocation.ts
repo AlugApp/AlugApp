@@ -30,14 +30,24 @@ export function useGeolocation() {
           loading: false,
         });
       },
-      () => {
-        setState(s => ({
-          ...s,
-          error: 'Permissão negada ou tempo esgotado. Verifique as configurações do navegador.',
-          loading: false,
-        }));
+      (err) => {
+        let msg: string;
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            msg = 'Permissão negada pelo navegador. Clique no ícone de cadeado na barra de endereço e permita a localização.';
+            break;
+          case err.POSITION_UNAVAILABLE:
+            msg = 'Localização indisponível. Verifique se os serviços de localização estão ativos em Configurações do Windows → Privacidade → Localização.';
+            break;
+          case err.TIMEOUT:
+            msg = 'Tempo esgotado. Tente novamente.';
+            break;
+          default:
+            msg = 'Erro ao obter localização.';
+        }
+        setState(s => ({ ...s, error: msg, loading: false }));
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
     );
   }, []);
 
