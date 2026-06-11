@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './lib/supabaseClient';
 import Home from './pages/Home';
@@ -20,6 +20,13 @@ import BottomNav from './components/BottomNav';
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat';
+
+interface Toast {
+  id: string;
+  message: string;
+  subtitle?: string;
+  type: 'info' | 'success';
+}
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'update-password';
 
 // ─── Tela de verificação MFA (AAL2) ──────────────────────────────────────────
@@ -97,6 +104,113 @@ const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar
 const AppContent: React.FC = () => {
   const { session, loading, signOut, profile } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
+
+  // ── Toast notifications ───────────────────────────────────────────────────
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const showToast = useCallback((message: string, type: Toast['type'] = 'info', subtitle?: string) => {
+    const id = Date.now().toString() + Math.random();
+    setToasts(prev => [...prev, { id, message, subtitle, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 6000);
+  }, []);
+
+  useEffect(() => {
+    if (!profile?.id || !session) return;
+
+    // Subscription para mudanças em solicitacao_aluguel (sem filtro — verificação client-side)
+    const solChannel = supabase.channel(`app-sol-notifs-${profile.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'solicitacao_aluguel' },
+        (payload) => { console.log('[Notif] sol event:', payload); }
+      )
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'solicitacao_aluguel' },
+        async (payload) => {
+          const sol = payload.new as any;
+          if (sol.idlocador !== profile.id) return; // só interessa ao locador do item
+          const [itemRes, userRes] = await Promise.all([
+            supabase.from('item').select('nome').eq('iditem', sol.iditem).single(),
+            supabase.from('users').select('fullName').eq('id', sol.idlocatario).single(),
+          ]);
+          const nome = userRes.data?.fullName || 'Alguém';
+          const item = itemRes.data?.nome || 'item';
+          showToast(`${nome} solicitou "${item}"`, 'info', 'Acesse o Chat para aceitar ou recusar o pedido.');
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'solicitacao_aluguel' },
+        async (payload) => {
+          const newSol = payload.new as any;
+          const oldSol = payload.old as any;
+          // old.status pode ser undefined se REPLICA IDENTITY não for FULL — usa fallback
+          if (oldSol?.status && newSol.status === oldSol.status) return;
+
+          const isLocador   = newSol.idlocador   === profile.id;
+          const isLocatario = newSol.idlocatario === profile.id;
+          if (!isLocador && !isLocatario) return;
+
+          const itemRes = await supabase.from('item').select('nome').eq('iditem', newSol.iditem).single();
+          const item = itemRes.data?.nome || 'Item';
+
+          // Notificações para o LOCATÁRIO (locador mudou o status)
+          if (isLocatario) {
+            if (newSol.status === 'aprovado')
+              showToast(`Seu aluguel de "${item}" foi aprovado!`, 'success', 'Aguarde o locador registrar o estado do item.');
+            else if (newSol.status === 'aguardando_entrega')
+              showToast(`"${item}" está pronto para entrega!`, 'success', 'Acesse o Chat e confirme o recebimento com uma foto.');
+            else if (newSol.status === 'rejeitado')
+              showToast(`Pedido de "${item}" recusado`, 'info', 'O locador não pôde aceitar desta vez.');
+            else if (newSol.status === 'concluido')
+              showToast(`Aluguel de "${item}" concluído!`, 'success', 'Obrigado por usar o AlugApp!');
+          }
+
+          // Notificações para o LOCADOR (locatário mudou o status)
+          if (isLocador) {
+            const userRes = await supabase.from('users').select('fullName').eq('id', newSol.idlocatario).single();
+            const nome = userRes.data?.fullName || 'Locatário';
+            if (newSol.status === 'em_andamento')
+              showToast(`${nome} confirmou o recebimento de "${item}"`, 'success', 'O item está em uso. Aguarde a devolução.');
+            else if (newSol.status === 'concluido')
+              showToast(`${nome} devolveu "${item}"`, 'success', 'Aluguel concluído com sucesso!');
+            else if (newSol.status === 'cancelado')
+              showToast(`${nome} cancelou o pedido de "${item}"`, 'info', 'A solicitação foi encerrada.');
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        console.log('[Notif] solChannel status:', status, err ?? '');
+      });
+
+    // Subscription separada para mensagens (evita conflito de múltiplas tabelas no mesmo canal)
+    const msgChannel = supabase.channel(`app-msg-notifs-${profile.id}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'mensagem' },
+        async (payload) => {
+          console.log('[Notif] msg event:', payload);
+          const msg = payload.new as any;
+          if (msg.idremetente === profile.id) return;
+          const solRes = await supabase
+            .from('solicitacao_aluguel')
+            .select('idlocador, idlocatario')
+            .eq('idsolicitacao', msg.idsolicitacao)
+            .single();
+          const sol = solRes.data as any;
+          if (!sol || (sol.idlocador !== profile.id && sol.idlocatario !== profile.id)) return;
+          const userRes = await supabase.from('users').select('fullName').eq('id', msg.idremetente).single();
+          const nome = userRes.data?.fullName || 'Alguém';
+          const preview = msg.conteudo?.length > 60 ? msg.conteudo.slice(0, 60) + '…' : msg.conteudo;
+          showToast(`Mensagem de ${nome}`, 'info', preview);
+        }
+      )
+      .subscribe((status, err) => {
+        console.log('[Notif] msgChannel status:', status, err ?? '');
+      });
+
+    return () => {
+      supabase.removeChannel(solChannel);
+      supabase.removeChannel(msgChannel);
+    };
+  }, [profile?.id, session, showToast]);
   const [mode, setMode] = useState<AppMode>(() => {
     const saved = sessionStorage.getItem('app_mode') as AppMode | null;
     return saved && VALID_MODES.includes(saved) ? saved : 'home';
@@ -292,6 +406,32 @@ const AppContent: React.FC = () => {
     <>
       {renderContent()}
       <BottomNav mode={mode} navigate={navigate} />
+
+      {/* Toast notifications */}
+      <div className="fixed top-4 right-4 z-[200] flex flex-col gap-2 pointer-events-none">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`bg-white border shadow-lg rounded-2xl px-4 py-3 max-w-sm flex items-start gap-3 pointer-events-auto ${
+              t.type === 'success' ? 'border-green-200' : 'border-blue-200'
+            }`}
+          >
+            <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${t.type === 'success' ? 'bg-green-500' : 'bg-blue-500'}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 leading-snug">{t.message}</p>
+              {t.subtitle && (
+                <p className="text-xs text-gray-500 mt-0.5 leading-snug">{t.subtitle}</p>
+              )}
+            </div>
+            <button
+              onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+              className="text-gray-300 hover:text-gray-500 flex-shrink-0 text-base leading-none"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </>
   );
 };

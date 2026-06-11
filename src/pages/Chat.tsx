@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { censurarTexto } from '../lib/censura';
@@ -28,6 +28,21 @@ interface Mensagem {
   criado_em: string;
 }
 
+interface ConversaGroup {
+  otherId: number;
+  otherUser: { fullName: string; avatar_url?: string } | null;
+  solicitacoes: Solicitacao[];
+  needsAction: boolean;
+  myRole: 'locador' | 'locatario';
+}
+
+interface ConversaAberta {
+  otherId: number;
+  otherUser: { fullName: string; avatar_url?: string } | null;
+  myRole: 'locador' | 'locatario';
+  solicitacoes: Solicitacao[];
+}
+
 interface ChatProps {
   onGoBack: () => void;
   onGoToPerfil: () => void;
@@ -41,45 +56,66 @@ const fmtDate = (d: string) =>
 const fmtTime = (d: string) =>
   new Date(d).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pendente:           { label: 'Pendente',    color: 'text-yellow-600' },
-  aprovado:           { label: 'Aprovado',    color: 'text-blue-600'   },
-  aguardando_entrega: { label: 'Ag. Entrega', color: 'text-orange-500' },
-  em_andamento:       { label: 'Em Andamento',color: 'text-indigo-600' },
-  rejeitado:          { label: 'Rejeitado',   color: 'text-red-500'    },
-  cancelado:          { label: 'Cancelado',   color: 'text-gray-400'   },
-  concluido:          { label: 'Concluído',   color: 'text-green-600'  },
+const STATUS_LABEL: Record<string, { label: string; color: string; bg: string }> = {
+  pendente:           { label: 'Pendente',     color: 'text-yellow-700', bg: 'bg-yellow-50'  },
+  aprovado:           { label: 'Aprovado',     color: 'text-blue-700',   bg: 'bg-blue-50'    },
+  aguardando_entrega: { label: 'Ag. Entrega',  color: 'text-orange-600', bg: 'bg-orange-50'  },
+  em_andamento:       { label: 'Em Andamento', color: 'text-indigo-600', bg: 'bg-indigo-50'  },
+  rejeitado:          { label: 'Rejeitado',    color: 'text-red-600',    bg: 'bg-red-50'     },
+  cancelado:          { label: 'Cancelado',    color: 'text-gray-500',   bg: 'bg-gray-100'   },
+  concluido:          { label: 'Concluído',    color: 'text-green-700',  bg: 'bg-green-50'   },
 };
 
 const CHAT_ATIVO_STATUS = new Set(['pendente', 'aprovado', 'aguardando_entrega', 'em_andamento']);
+const TERMINAL_STATUS   = new Set(['concluido', 'cancelado', 'rejeitado']);
+
+function groupByOther(
+  sols: Solicitacao[],
+  myRole: 'locador' | 'locatario'
+): ConversaGroup[] {
+  const map = new Map<number, Solicitacao[]>();
+  for (const sol of sols) {
+    const otherId = myRole === 'locador' ? sol.idlocatario : sol.idlocador;
+    if (!map.has(otherId)) map.set(otherId, []);
+    map.get(otherId)!.push(sol);
+  }
+  return Array.from(map.entries())
+    .map(([otherId, group]) => {
+      const sorted = [...group].sort((a, b) => b.idsolicitacao - a.idsolicitacao);
+      const newest = sorted[0];
+      const otherUser = (myRole === 'locador' ? newest.locatario_user : newest.locador_user) ?? null;
+      const needsAction = myRole === 'locador'
+        ? group.some(s => s.status === 'pendente' || s.status === 'aprovado')
+        : group.some(s => s.status === 'aguardando_entrega');
+      return { otherId, otherUser, solicitacoes: sorted, needsAction, myRole };
+    })
+    .sort((a, b) => b.solicitacoes[0].idsolicitacao - a.solicitacoes[0].idsolicitacao);
+}
 
 export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: ChatProps) {
   const { profile } = useAuth();
 
-  // ── lista de solicitações ──
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [queryError, setQueryError] = useState<string | null>(null);
+  const [solicitacoes, setSolicitacoes]   = useState<Solicitacao[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [queryError, setQueryError]       = useState<string | null>(null);
+  const [activeTab, setActiveTab]         = useState<'pedidos' | 'requisicoes'>('pedidos');
+  const [selectedConversa, setSelectedConversa] = useState<ConversaAberta | null>(null);
+  const [responding, setResponding]       = useState<number | null>(null);
 
-  // ── conversa selecionada ──
-  const [selectedSol, setSelectedSol] = useState<Solicitacao | null>(null);
-  const [responding, setResponding] = useState<number | null>(null);
+  const [mensagens, setMensagens]         = useState<Mensagem[]>([]);
+  const [msgInput, setMsgInput]           = useState('');
+  const [sendingMsg, setSendingMsg]       = useState(false);
+  const messagesEndRef                    = useRef<HTMLDivElement>(null);
 
-  // ── mensagens ──
-  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
-  const [msgInput, setMsgInput] = useState('');
-  const [sendingMsg, setSendingMsg] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [showFotoModal, setShowFotoModal]     = useState(false);
+  const [fotoModalMode, setFotoModalMode]     = useState<'antes' | 'recebimento' | null>(null);
+  const [fotoFile, setFotoFile]               = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview]         = useState<string | null>(null);
+  const [uploadingFoto, setUploadingFoto]     = useState(false);
+  const [fotoError, setFotoError]             = useState<string | null>(null);
+  const [activeSolForFoto, setActiveSolForFoto] = useState<number | null>(null);
 
-  // ── modal de foto ──
-  const [showFotoModal, setShowFotoModal] = useState(false);
-  const [fotoModalMode, setFotoModalMode] = useState<'antes' | 'recebimento' | null>(null);
-  const [fotoFile, setFotoFile] = useState<File | null>(null);
-  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
-  const [fotoError, setFotoError] = useState<string | null>(null);
-
-  // ── Carregar lista de solicitações ──────────────────────────────────────────
+  // ── Carregar todas as solicitações ─────────────────────────────────────────
   const load = useCallback(async () => {
     if (!profile?.id) return;
     setLoading(true);
@@ -111,7 +147,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
         nome: itemsRes.data?.find((i: any) => i.iditem === s.iditem)?.nome ?? '—',
         foto_url: fotosRes.data?.find((f: any) => f.iditem === s.iditem)?.url_foto,
       },
-      locador_user: usersRes.data?.find((u: any) => u.id === s.idlocador) ?? null,
+      locador_user:   usersRes.data?.find((u: any) => u.id === s.idlocador)   ?? null,
       locatario_user: usersRes.data?.find((u: any) => u.id === s.idlocatario) ?? null,
     }));
 
@@ -121,81 +157,111 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Carregar mensagens + Realtime quando muda a conversa ────────────────────
+  // Sincroniza solicitacoes da conversa aberta quando o estado global muda
   useEffect(() => {
-    if (!selectedSol) { setMensagens([]); return; }
+    if (!selectedConversa || !profile?.id) return;
+    const { myRole, otherId } = selectedConversa;
+    const filtered = solicitacoes.filter(s =>
+      myRole === 'locador'
+        ? s.idlocador === profile.id && s.idlocatario === otherId
+        : s.idlocatario === profile.id && s.idlocador === otherId
+    );
+    const sorted = [...filtered].sort((a, b) => a.idsolicitacao - b.idsolicitacao);
+    setSelectedConversa(prev => prev ? { ...prev, solicitacoes: sorted } : null);
+  }, [solicitacoes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    supabase
-      .from('mensagem')
+  // ── Mensagens + Realtime ao abrir conversa ─────────────────────────────────
+  useEffect(() => {
+    if (!selectedConversa) { setMensagens([]); return; }
+    const solIds = selectedConversa.solicitacoes.map(s => s.idsolicitacao);
+    if (solIds.length === 0) return;
+
+    supabase.from('mensagem')
       .select('*')
-      .eq('idsolicitacao', selectedSol.idsolicitacao)
+      .in('idsolicitacao', solIds)
       .order('criado_em', { ascending: true })
       .then(({ data }) => setMensagens((data as Mensagem[]) || []));
 
-    const channel = supabase
-      .channel(`chat-sol-${selectedSol.idsolicitacao}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'mensagem',
-          filter: `idsolicitacao=eq.${selectedSol.idsolicitacao}` },
-        (payload) => {
-          setMensagens(prev => {
-            const nova = payload.new as Mensagem;
-            if (prev.some(m => m.idmensagem === nova.idmensagem)) return prev;
-            return [...prev, nova];
-          });
-        }
-      )
-      .subscribe();
+    const channels = solIds.map(solId =>
+      supabase.channel(`chat-sol-${solId}`)
+        .on('postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'mensagem', filter: `idsolicitacao=eq.${solId}` },
+          (payload) => {
+            setMensagens(prev => {
+              const nova = payload.new as Mensagem;
+              if (prev.some(m => m.idmensagem === nova.idmensagem)) return prev;
+              return [...prev, nova];
+            });
+          }
+        ).subscribe()
+    );
 
-    return () => { supabase.removeChannel(channel); };
-  }, [selectedSol?.idsolicitacao]);
+    return () => { channels.forEach(ch => supabase.removeChannel(ch)); };
+  }, [selectedConversa?.otherId, selectedConversa?.myRole]);
 
-  // ── Auto-scroll ao receber mensagem ────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens]);
 
-  // ── Status / solicitações ───────────────────────────────────────────────────
+  // ── Agrupamentos por aba ────────────────────────────────────────────────────
+  const pedidos = useMemo(() =>
+    groupByOther(solicitacoes.filter(s => s.idlocador === profile?.id), 'locador'),
+    [solicitacoes, profile?.id]
+  );
+
+  const requisicoes = useMemo(() =>
+    groupByOther(solicitacoes.filter(s => s.idlocatario === profile?.id), 'locatario'),
+    [solicitacoes, profile?.id]
+  );
+
+  const openConversa = (group: ConversaGroup) => {
+    const sorted = [...group.solicitacoes].sort((a, b) => a.idsolicitacao - b.idsolicitacao);
+    setSelectedConversa({ otherId: group.otherId, otherUser: group.otherUser, myRole: group.myRole, solicitacoes: sorted });
+    setMsgInput('');
+  };
+
+  // ── Ações de status ─────────────────────────────────────────────────────────
   const applyStatus = (id: number, novoStatus: string, extra?: Partial<Solicitacao>) => {
     setSolicitacoes(prev =>
       prev.map(s => s.idsolicitacao === id ? { ...s, status: novoStatus, ...extra } : s)
     );
-    setSelectedSol(prev =>
-      prev?.idsolicitacao === id ? { ...prev, status: novoStatus, ...extra } : prev
-    );
   };
 
   const handleResponder = async (id: number, novoStatus: 'aprovado' | 'rejeitado') => {
-    const sol = solicitacoes.find(s => s.idsolicitacao === id);
-    if (!sol || sol.status !== 'pendente' || responding !== null) return;
+    if (responding !== null) return;
     setResponding(id);
-    const { error } = await supabase
-      .from('solicitacao_aluguel').update({ status: novoStatus })
-      .eq('idsolicitacao', id).eq('status', 'pendente');
+    const { error } = await supabase.from('solicitacao_aluguel')
+      .update({ status: novoStatus }).eq('idsolicitacao', id).eq('status', 'pendente');
     if (!error) applyStatus(id, novoStatus);
     setResponding(null);
   };
 
   const handleCancelar = async (id: number) => {
-    const sol = solicitacoes.find(s => s.idsolicitacao === id);
-    if (!sol || sol.status !== 'pendente' || responding !== null) return;
+    if (responding !== null) return;
     setResponding(id);
-    const { error } = await supabase
-      .from('solicitacao_aluguel').update({ status: 'cancelado' })
-      .eq('idsolicitacao', id).eq('status', 'pendente');
+    const { error } = await supabase.from('solicitacao_aluguel')
+      .update({ status: 'cancelado' }).eq('idsolicitacao', id).eq('status', 'pendente');
     if (!error) applyStatus(id, 'cancelado');
     setResponding(null);
   };
 
+  const handleDevolver = async (id: number) => {
+    if (responding !== null) return;
+    setResponding(id);
+    const { error } = await supabase.from('solicitacao_aluguel')
+      .update({ status: 'concluido' }).eq('idsolicitacao', id);
+    if (!error) applyStatus(id, 'concluido');
+    setResponding(null);
+  };
+
   // ── Modal de foto ───────────────────────────────────────────────────────────
-  const openFotoModal = (mode: 'antes' | 'recebimento') => {
-    setFotoModalMode(mode); setFotoFile(null); setFotoPreview(null);
-    setFotoError(null); setShowFotoModal(true);
+  const openFotoModal = (mode: 'antes' | 'recebimento', solId: number) => {
+    setFotoModalMode(mode); setActiveSolForFoto(solId);
+    setFotoFile(null); setFotoPreview(null); setFotoError(null); setShowFotoModal(true);
   };
   const closeFotoModal = () => {
     setShowFotoModal(false); setFotoFile(null);
-    setFotoPreview(null); setFotoError(null);
+    setFotoPreview(null); setFotoError(null); setActiveSolForFoto(null);
   };
   const handleFotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -203,11 +269,11 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
     setFotoFile(file); setFotoPreview(URL.createObjectURL(file)); e.target.value = '';
   };
   const handleFotoSubmit = async () => {
-    if (!fotoFile || !selectedSol || !fotoModalMode) return;
+    if (!fotoFile || !fotoModalMode || activeSolForFoto === null) return;
     setUploadingFoto(true); setFotoError(null);
 
     const suffix = fotoModalMode === 'antes' ? 'antes' : 'recebimento';
-    const fileName = `rental/${selectedSol.idsolicitacao}-${suffix}-${Date.now()}`;
+    const fileName = `rental/${activeSolForFoto}-${suffix}-${Date.now()}`;
     const { error: uploadError } = await supabase.storage.from('items').upload(fileName, fotoFile);
     if (uploadError) { setFotoError('Erro ao enviar a foto. Tente novamente.'); setUploadingFoto(false); return; }
 
@@ -216,32 +282,27 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
     if (fotoModalMode === 'antes') {
       const { error } = await supabase.from('solicitacao_aluguel')
         .update({ foto_antes_url: publicUrl, status: 'aguardando_entrega' })
-        .eq('idsolicitacao', selectedSol.idsolicitacao);
-      if (!error) { applyStatus(selectedSol.idsolicitacao, 'aguardando_entrega', { foto_antes_url: publicUrl }); closeFotoModal(); }
+        .eq('idsolicitacao', activeSolForFoto);
+      if (!error) { applyStatus(activeSolForFoto, 'aguardando_entrega', { foto_antes_url: publicUrl }); closeFotoModal(); }
       else setFotoError('Erro ao registrar foto.');
     } else {
       const { error } = await supabase.from('solicitacao_aluguel')
         .update({ foto_recebimento_url: publicUrl, status: 'em_andamento' })
-        .eq('idsolicitacao', selectedSol.idsolicitacao);
-      if (!error) { applyStatus(selectedSol.idsolicitacao, 'em_andamento', { foto_recebimento_url: publicUrl }); closeFotoModal(); }
+        .eq('idsolicitacao', activeSolForFoto);
+      if (!error) { applyStatus(activeSolForFoto, 'em_andamento', { foto_recebimento_url: publicUrl }); closeFotoModal(); }
       else setFotoError('Erro ao confirmar recebimento.');
     }
     setUploadingFoto(false);
   };
 
-  const handleDevolver = async (id: number) => {
-    const sol = solicitacoes.find(s => s.idsolicitacao === id);
-    if (!sol || sol.status !== 'em_andamento' || responding !== null) return;
-    setResponding(id);
-    const { error } = await supabase.from('solicitacao_aluguel').update({ status: 'concluido' }).eq('idsolicitacao', id);
-    if (!error) applyStatus(id, 'concluido');
-    setResponding(null);
-  };
-
   // ── Enviar mensagem ─────────────────────────────────────────────────────────
   const handleSend = async () => {
     const texto = msgInput.trim();
-    if (!texto || !selectedSol || !profile?.id || sendingMsg) return;
+    if (!texto || !selectedConversa || !profile?.id || sendingMsg) return;
+
+    // Envia para a solicitação ativa mais recente
+    const solsDesc = [...selectedConversa.solicitacoes].sort((a, b) => b.idsolicitacao - a.idsolicitacao);
+    const targetSol = solsDesc.find(s => CHAT_ATIVO_STATUS.has(s.status)) ?? solsDesc[0];
 
     const textoCensurado = censurarTexto(texto);
     setSendingMsg(true);
@@ -249,9 +310,8 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
 
     const { data: novaMsg } = await supabase
       .from('mensagem')
-      .insert({ idsolicitacao: selectedSol.idsolicitacao, idremetente: profile.id, conteudo: textoCensurado })
-      .select()
-      .single();
+      .insert({ idsolicitacao: targetSol.idsolicitacao, idremetente: profile.id, conteudo: textoCensurado })
+      .select().single();
 
     if (novaMsg) {
       setMensagens(prev => {
@@ -265,18 +325,16 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
   /* ══════════════════════════════════════════════════════════════════════════
      Tela de detalhe da conversa
   ══════════════════════════════════════════════════════════════════════════ */
-  if (selectedSol) {
-    const isLocador = selectedSol.idlocador === profile?.id;
-    const otherUser = isLocador ? selectedSol.locatario_user : selectedSol.locador_user;
-    const isResponding = responding === selectedSol.idsolicitacao;
-    const chatAtivo = CHAT_ATIVO_STATUS.has(selectedSol.status);
+  if (selectedConversa) {
+    const { otherUser, myRole, solicitacoes: convSols } = selectedConversa;
+    const chatAtivo = convSols.some(s => CHAT_ATIVO_STATUS.has(s.status));
 
     return (
       <div className="fixed top-0 left-0 right-0 bottom-16 bg-gray-50 flex flex-col">
 
         {/* Header */}
         <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3">
-          <button onClick={() => setSelectedSol(null)} className="p-2 hover:bg-gray-100 rounded-full">
+          <button onClick={() => setSelectedConversa(null)} className="p-2 hover:bg-gray-100 rounded-full">
             <ArrowLeft className="w-5 h-5 text-gray-700" />
           </button>
           <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -285,170 +343,169 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
               : <span className="text-blue-600 font-bold text-base">{otherUser?.fullName?.charAt(0) || '?'}</span>
             }
           </div>
-          <div>
+          <div className="flex-1">
             <h2 className="text-sm font-bold text-gray-900">{otherUser?.fullName || 'Usuário'}</h2>
-            <p className="text-xs text-gray-500">{isLocador ? 'Locatário' : 'Locador'}</p>
+            <p className="text-xs text-gray-500">
+              {myRole === 'locador' ? 'Locatário' : 'Locador'} · {convSols.length} {convSols.length === 1 ? 'aluguel' : 'aluguéis'}
+            </p>
           </div>
         </header>
 
-        {/* Área de scroll: card de status + mensagens */}
+        {/* Área de scroll */}
         <div className="flex-1 overflow-y-auto">
 
-          {/* Card de status da solicitação */}
-          <div className="p-4">
-            <div className="flex flex-col gap-1 max-w-[85%] mr-auto">
-              <div className="bg-white rounded-2xl rounded-tl-sm border border-gray-200 shadow-sm p-4">
-                <p className="text-sm text-gray-800 font-medium mb-3">
-                  {isLocador ? 'Solicitação de aluguel recebida:' : 'Você enviou uma solicitação de aluguel:'}
-                </p>
+          {/* Cards de cada solicitação (mais antigos no topo) */}
+          <div className="p-4 space-y-3">
+            {convSols.map(sol => {
+              const isLocador   = myRole === 'locador';
+              const isResponding = responding === sol.idsolicitacao;
+              const st = STATUS_LABEL[sol.status] ?? { label: sol.status, color: 'text-gray-500', bg: 'bg-gray-100' };
+              const isTerminal = TERMINAL_STATUS.has(sol.status);
 
-                {/* Card do item */}
-                <div className="flex gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 mb-3">
-                  <div className="w-16 h-16 rounded-lg bg-gray-200 flex-shrink-0 overflow-hidden">
-                    {selectedSol.item?.foto_url && (
-                      <img src={selectedSol.item.foto_url} alt="Item" className="w-full h-full object-cover" />
-                    )}
+              return (
+                <div key={sol.idsolicitacao} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+
+                  {/* Cabeçalho do card */}
+                  <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0 overflow-hidden">
+                      {sol.item?.foto_url && (
+                        <img src={sol.item.foto_url} alt="Item" className="w-full h-full object-cover" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{sol.item?.nome}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {fmtDate(sol.data_inicio_prevista)} → {fmtDate(sol.data_fim_prevista)}
+                      </p>
+                      <p className="text-sm font-bold text-blue-700 mt-0.5">{fmtBRL(sol.valor_total_previsto)}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${st.color} ${st.bg}`}>
+                      {st.label}
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-gray-900 leading-tight">{selectedSol.item?.nome}</p>
-                    <p className="text-xs text-gray-500 mt-1">De {fmtDate(selectedSol.data_inicio_prevista)}</p>
-                    <p className="text-xs text-gray-500">Até {fmtDate(selectedSol.data_fim_prevista)}</p>
-                    <p className="text-sm font-bold text-blue-700 mt-1">{fmtBRL(selectedSol.valor_total_previsto)}</p>
-                  </div>
+
+                  {/* Ações (somente para status não terminais) */}
+                  {!isTerminal && (
+                    <div className="px-4 pb-4 space-y-2">
+
+                      {/* PENDENTE */}
+                      {sol.status === 'pendente' && isLocador && (
+                        <div className="flex gap-2">
+                          <button onClick={() => handleResponder(sol.idsolicitacao, 'rejeitado')} disabled={isResponding}
+                            className="flex-1 py-2 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition disabled:opacity-50">
+                            {isResponding ? '...' : 'Rejeitar'}
+                          </button>
+                          <button onClick={() => handleResponder(sol.idsolicitacao, 'aprovado')} disabled={isResponding}
+                            className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition disabled:opacity-50">
+                            {isResponding ? '...' : 'Aceitar'}
+                          </button>
+                        </div>
+                      )}
+                      {sol.status === 'pendente' && !isLocador && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-yellow-600 font-medium text-center bg-yellow-50 py-1.5 rounded-lg flex items-center justify-center gap-1">
+                            <Clock className="w-3.5 h-3.5" /> Aguardando resposta do locador...
+                          </p>
+                          <button onClick={() => handleCancelar(sol.idsolicitacao)} disabled={isResponding}
+                            className="w-full py-1.5 text-xs font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50">
+                            {isResponding ? 'Cancelando...' : 'Cancelar Solicitação'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* APROVADO */}
+                      {sol.status === 'aprovado' && isLocador && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-blue-700 font-medium bg-blue-50 py-2 px-3 rounded-lg flex items-center gap-1.5">
+                            <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            Aprovado! Registre o estado atual do item antes da entrega.
+                          </p>
+                          <button onClick={() => openFotoModal('antes', sol.idsolicitacao)}
+                            className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition flex items-center justify-center gap-2">
+                            <Camera className="w-4 h-4" /> Fotografar Estado do Item
+                          </button>
+                        </div>
+                      )}
+                      {sol.status === 'aprovado' && !isLocador && (
+                        <p className="text-xs text-green-700 font-medium flex items-center justify-center gap-1.5 bg-green-50 py-2 px-3 rounded-lg">
+                          <CheckCircle className="w-4 h-4" /> Aprovado! Aguardando o locador registrar o estado do item.
+                        </p>
+                      )}
+
+                      {/* AGUARDANDO ENTREGA */}
+                      {sol.status === 'aguardando_entrega' && isLocador && (
+                        <div className="space-y-2">
+                          {sol.foto_antes_url && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado registrado:</p>
+                              <img src={sol.foto_antes_url} alt="Estado antes" className="w-full h-36 object-cover rounded-xl" />
+                            </div>
+                          )}
+                          <p className="text-xs text-yellow-700 font-medium bg-yellow-50 py-2 px-3 rounded-lg flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 flex-shrink-0" /> Aguardando o locatário confirmar o recebimento.
+                          </p>
+                        </div>
+                      )}
+                      {sol.status === 'aguardando_entrega' && !isLocador && (
+                        <div className="space-y-2">
+                          {sol.foto_antes_url && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
+                              <img src={sol.foto_antes_url} alt="Estado antes" className="w-full h-36 object-cover rounded-xl" />
+                            </div>
+                          )}
+                          <p className="text-xs text-blue-700 font-medium bg-blue-50 py-2 px-3 rounded-lg">
+                            O locador preparou o item. Confirme o recebimento com uma foto.
+                          </p>
+                          <button onClick={() => openFotoModal('recebimento', sol.idsolicitacao)}
+                            className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition flex items-center justify-center gap-2">
+                            <Camera className="w-4 h-4" /> Confirmar Recebimento
+                          </button>
+                        </div>
+                      )}
+
+                      {/* EM ANDAMENTO */}
+                      {sol.status === 'em_andamento' && isLocador && (
+                        <div className="space-y-2">
+                          {sol.foto_antes_url && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
+                              <img src={sol.foto_antes_url} alt="Estado antes" className="w-full h-28 object-cover rounded-xl" />
+                            </div>
+                          )}
+                          {sol.foto_recebimento_url && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1.5 font-medium">Confirmação do locatário:</p>
+                              <img src={sol.foto_recebimento_url} alt="Confirmação" className="w-full h-28 object-cover rounded-xl" />
+                            </div>
+                          )}
+                          <p className="text-xs text-indigo-700 font-medium bg-indigo-50 py-2 px-3 rounded-lg">
+                            Item em uso. Devolução prevista para {fmtDate(sol.data_fim_prevista)}.
+                          </p>
+                        </div>
+                      )}
+                      {sol.status === 'em_andamento' && !isLocador && (
+                        <div className="space-y-2">
+                          {sol.foto_antes_url && (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
+                              <img src={sol.foto_antes_url} alt="Estado antes" className="w-full h-28 object-cover rounded-xl" />
+                            </div>
+                          )}
+                          <p className="text-xs text-indigo-700 font-medium bg-indigo-50 py-2 px-3 rounded-lg">
+                            Item em uso. Devolução prevista para {fmtDate(sol.data_fim_prevista)}.
+                          </p>
+                          <button onClick={() => handleDevolver(sol.idsolicitacao)} disabled={isResponding}
+                            className="w-full py-2.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
+                            {isResponding ? 'Processando...' : '↩ Devolver Item'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                {/* PENDENTE */}
-                {selectedSol.status === 'pendente' && isLocador && (
-                  <div className="flex gap-2">
-                    <button onClick={() => handleResponder(selectedSol.idsolicitacao, 'rejeitado')} disabled={isResponding}
-                      className="flex-1 py-2 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition disabled:opacity-50">
-                      {isResponding ? '...' : 'Rejeitar'}
-                    </button>
-                    <button onClick={() => handleResponder(selectedSol.idsolicitacao, 'aprovado')} disabled={isResponding}
-                      className="flex-1 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition disabled:opacity-50">
-                      {isResponding ? '...' : 'Aceitar'}
-                    </button>
-                  </div>
-                )}
-                {selectedSol.status === 'pendente' && !isLocador && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-yellow-600 font-medium text-center bg-yellow-50 py-1.5 rounded-lg flex items-center justify-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> Aguardando resposta do locador...
-                    </p>
-                    <button onClick={() => handleCancelar(selectedSol.idsolicitacao)} disabled={isResponding}
-                      className="w-full py-1.5 text-xs font-semibold text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50">
-                      {isResponding ? 'Cancelando...' : 'Cancelar Solicitação'}
-                    </button>
-                  </div>
-                )}
-
-                {/* APROVADO */}
-                {selectedSol.status === 'aprovado' && isLocador && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-blue-700 font-medium bg-blue-50 py-2 px-3 rounded-lg flex items-center gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                      Aprovado! Registre o estado atual do item antes da entrega.
-                    </p>
-                    <button onClick={() => openFotoModal('antes')}
-                      className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition flex items-center justify-center gap-2">
-                      <Camera className="w-4 h-4" /> Fotografar Estado do Item
-                    </button>
-                  </div>
-                )}
-                {selectedSol.status === 'aprovado' && !isLocador && (
-                  <p className="text-xs text-green-700 font-medium flex items-center justify-center gap-1.5 bg-green-50 py-2 px-3 rounded-lg">
-                    <CheckCircle className="w-4 h-4" /> Aprovado! Aguardando o locador registrar o estado do item.
-                  </p>
-                )}
-
-                {/* AGUARDANDO ENTREGA */}
-                {selectedSol.status === 'aguardando_entrega' && isLocador && (
-                  <div className="space-y-2">
-                    {selectedSol.foto_antes_url && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado registrado:</p>
-                        <img src={selectedSol.foto_antes_url} alt="Estado antes" className="w-full h-36 object-cover rounded-xl" />
-                      </div>
-                    )}
-                    <p className="text-xs text-yellow-700 font-medium bg-yellow-50 py-2 px-3 rounded-lg flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 flex-shrink-0" /> Aguardando o locatário confirmar o recebimento.
-                    </p>
-                  </div>
-                )}
-                {selectedSol.status === 'aguardando_entrega' && !isLocador && (
-                  <div className="space-y-2">
-                    {selectedSol.foto_antes_url && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
-                        <img src={selectedSol.foto_antes_url} alt="Estado antes" className="w-full h-36 object-cover rounded-xl" />
-                      </div>
-                    )}
-                    <p className="text-xs text-blue-700 font-medium bg-blue-50 py-2 px-3 rounded-lg">
-                      O locador preparou o item. Confirme o recebimento com uma foto.
-                    </p>
-                    <button onClick={() => openFotoModal('recebimento')}
-                      className="w-full py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition flex items-center justify-center gap-2">
-                      <Camera className="w-4 h-4" /> Confirmar Recebimento
-                    </button>
-                  </div>
-                )}
-
-                {/* EM ANDAMENTO */}
-                {selectedSol.status === 'em_andamento' && isLocador && (
-                  <div className="space-y-2">
-                    {selectedSol.foto_antes_url && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
-                        <img src={selectedSol.foto_antes_url} alt="Estado antes" className="w-full h-28 object-cover rounded-xl" />
-                      </div>
-                    )}
-                    {selectedSol.foto_recebimento_url && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Confirmação do locatário:</p>
-                        <img src={selectedSol.foto_recebimento_url} alt="Confirmação" className="w-full h-28 object-cover rounded-xl" />
-                      </div>
-                    )}
-                    <p className="text-xs text-indigo-700 font-medium bg-indigo-50 py-2 px-3 rounded-lg">
-                      Item em uso. Devolução prevista para {fmtDate(selectedSol.data_fim_prevista)}.
-                    </p>
-                  </div>
-                )}
-                {selectedSol.status === 'em_andamento' && !isLocador && (
-                  <div className="space-y-2">
-                    {selectedSol.foto_antes_url && (
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Estado antes da entrega:</p>
-                        <img src={selectedSol.foto_antes_url} alt="Estado antes" className="w-full h-28 object-cover rounded-xl" />
-                      </div>
-                    )}
-                    <p className="text-xs text-indigo-700 font-medium bg-indigo-50 py-2 px-3 rounded-lg">
-                      Item em uso. Devolução prevista para {fmtDate(selectedSol.data_fim_prevista)}.
-                    </p>
-                    <button onClick={() => handleDevolver(selectedSol.idsolicitacao)} disabled={isResponding}
-                      className="w-full py-2.5 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2">
-                      {isResponding ? 'Processando...' : '↩ Devolver Item'}
-                    </button>
-                  </div>
-                )}
-
-                {/* FINAIS */}
-                {selectedSol.status === 'rejeitado' && (
-                  <p className="text-xs text-red-700 font-medium flex items-center justify-center gap-1 bg-red-50 py-1.5 rounded-lg">
-                    <XCircle className="w-4 h-4" /> Solicitação Rejeitada
-                  </p>
-                )}
-                {selectedSol.status === 'cancelado' && (
-                  <p className="text-xs text-gray-500 font-medium flex items-center justify-center gap-1 bg-gray-100 py-1.5 rounded-lg">
-                    <XCircle className="w-4 h-4" /> Solicitação Cancelada
-                  </p>
-                )}
-                {selectedSol.status === 'concluido' && (
-                  <p className="text-xs text-green-700 font-medium flex items-center justify-center gap-1 bg-green-50 py-1.5 rounded-lg">
-                    <CheckCircle className="w-4 h-4" /> Aluguel Concluído
-                  </p>
-                )}
-              </div>
-            </div>
+              );
+            })}
           </div>
 
           {/* Separador de mensagens */}
@@ -490,7 +547,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
         <div className="flex-shrink-0 bg-white border-t border-gray-200 px-3 py-2.5 flex gap-2 items-center">
           <input
             type="text"
-            placeholder={chatAtivo ? 'Digite uma mensagem...' : 'Conversa encerrada'}
+            placeholder={chatAtivo ? 'Digite uma mensagem...' : 'Sem aluguel ativo'}
             disabled={!chatAtivo || sendingMsg}
             value={msgInput}
             onChange={e => setMsgInput(e.target.value)}
@@ -527,7 +584,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
                   </button>
                 </div>
               ) : (
-                <label className="block w-full h-44 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 mb-4 transition">
+                <label className="flex w-full h-44 border-2 border-dashed border-gray-200 rounded-xl flex-col items-center justify-center cursor-pointer hover:border-blue-400 mb-4 transition">
                   <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFotoSelect} />
                   <Camera className="w-10 h-10 text-gray-300 mb-2" />
                   <span className="text-sm text-gray-400">Toque para tirar ou escolher foto</span>
@@ -552,13 +609,47 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-     Lista de solicitações
+     Lista de conversas
   ══════════════════════════════════════════════════════════════════════════ */
+  const currentList    = activeTab === 'pedidos' ? pedidos : requisicoes;
+  const pedidosBadge   = pedidos.filter(c => c.needsAction).length;
+  const reqBadge       = requisicoes.filter(c => c.needsAction).length;
+
   return (
     <div className="min-h-screen bg-white pb-20">
       <header className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10 shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Chat</h1>
       </header>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 sticky top-[65px] z-10 bg-white">
+        <button
+          onClick={() => setActiveTab('pedidos')}
+          className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 border-b-2 transition ${
+            activeTab === 'pedidos' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent'
+          }`}
+        >
+          Pedidos Recebidos
+          {pedidosBadge > 0 && (
+            <span className="bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+              {pedidosBadge}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('requisicoes')}
+          className={`flex-1 py-3 text-sm font-semibold flex items-center justify-center gap-1.5 border-b-2 transition ${
+            activeTab === 'requisicoes' ? 'text-blue-600 border-blue-600' : 'text-gray-500 border-transparent'
+          }`}
+        >
+          Minhas Requisições
+          {reqBadge > 0 && (
+            <span className="bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+              {reqBadge}
+            </span>
+          )}
+        </button>
+      </div>
 
       {loading ? (
         <div className="p-4 space-y-3">
@@ -574,50 +665,55 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
         </div>
       ) : queryError ? (
         <div className="m-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-          <p className="text-xs font-bold text-red-700 mb-1">Erro ao carregar solicitações:</p>
+          <p className="text-xs font-bold text-red-700 mb-1">Erro ao carregar:</p>
           <p className="text-xs font-mono text-red-600 break-all">{queryError}</p>
-          <p className="text-xs text-red-500 mt-2">Verifique as políticas de RLS no Supabase para a tabela <b>solicitacao_aluguel</b>.</p>
         </div>
-      ) : solicitacoes.length === 0 ? (
+      ) : currentList.length === 0 ? (
         <div className="p-8 text-center text-gray-500">
           <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="font-medium text-gray-700">Nenhuma solicitação ainda.</p>
-          <p className="text-sm mt-1">Quando você alugar ou receber um pedido de aluguel, ele aparecerá aqui.</p>
+          <p className="font-medium text-gray-700">
+            {activeTab === 'pedidos' ? 'Nenhum pedido recebido ainda.' : 'Nenhuma requisição enviada ainda.'}
+          </p>
+          <p className="text-sm mt-1 text-gray-400">
+            {activeTab === 'pedidos'
+              ? 'Quando alguém solicitar um de seus itens, aparecerá aqui.'
+              : 'Quando você solicitar um item, aparecerá aqui.'}
+          </p>
         </div>
       ) : (
         <div className="divide-y divide-gray-100">
-          {solicitacoes.map(sol => {
-            const isLocador = sol.idlocador === profile?.id;
-            const otherUser = isLocador ? sol.locatario_user : sol.locador_user;
-            const needsAction = isLocador
-              ? (sol.status === 'pendente' || sol.status === 'aprovado')
-              : (sol.status === 'aguardando_entrega');
-            const st = STATUS_LABEL[sol.status] ?? { label: sol.status, color: 'text-gray-500' };
+          {currentList.map(conv => {
+            const newest     = conv.solicitacoes[0];
+            const st         = STATUS_LABEL[newest.status] ?? { label: newest.status, color: 'text-gray-500', bg: 'bg-gray-100' };
+            const extraCount = conv.solicitacoes.length - 1;
 
             return (
               <button
-                key={sol.idsolicitacao}
-                onClick={() => setSelectedSol(sol)}
+                key={conv.otherId}
+                onClick={() => openConversa(conv)}
                 className="w-full px-4 py-4 flex items-center gap-3 hover:bg-gray-50 transition text-left"
               >
                 <div className="relative flex-shrink-0">
                   <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center overflow-hidden">
-                    {otherUser?.avatar_url
-                      ? <img src={otherUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                      : <span className="text-blue-600 font-bold text-lg">{otherUser?.fullName?.charAt(0) || '?'}</span>
+                    {conv.otherUser?.avatar_url
+                      ? <img src={conv.otherUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                      : <span className="text-blue-600 font-bold text-lg">{conv.otherUser?.fullName?.charAt(0) || '?'}</span>
                     }
                   </div>
-                  {needsAction && (
+                  {conv.needsAction && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-2 border-white rounded-full" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-0.5">
-                    <h3 className="text-sm font-bold text-gray-900 truncate">{otherUser?.fullName || 'Usuário'}</h3>
-                    <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{fmtDate(sol.data_inicio_prevista)}</span>
+                    <h3 className="text-sm font-bold text-gray-900 truncate">{conv.otherUser?.fullName || 'Usuário'}</h3>
+                    <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{fmtDate(newest.data_inicio_prevista)}</span>
                   </div>
                   <p className="text-xs text-gray-600 truncate">
-                    {isLocador ? 'Solicitação para: ' : 'Você solicitou: '}{sol.item?.nome}
+                    {newest.item?.nome}
+                    {extraCount > 0 && (
+                      <span className="text-gray-400 ml-1">+{extraCount} {extraCount === 1 ? 'aluguel' : 'aluguéis'}</span>
+                    )}
                   </p>
                   <p className={`text-[10px] mt-1 font-semibold ${st.color}`}>● {st.label}</p>
                 </div>

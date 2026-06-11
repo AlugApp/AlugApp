@@ -1,30 +1,12 @@
-import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { haversineKm } from "../lib/geocoding";
 import {
-  Package,
-  Search, SlidersHorizontal, X, CirclePlus, Bell,
-  MapPin, LocateFixed, Loader2, CheckCircle, XCircle, Clock,
+  Package, Search, SlidersHorizontal, X, CirclePlus, Bell,
+  MapPin, LocateFixed, Loader2,
 } from "lucide-react";
-
-interface NotifSol {
-  idsolicitacao: number;
-  iditem: number;
-  idlocatario: number;
-  data_inicio_prevista: string;
-  data_fim_prevista: string;
-  valor_total_previsto: number;
-  item_nome: string;
-  locatario_nome: string;
-  item_foto?: string;
-}
-
-const fmtBRL = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-const fmtDate = (d: string) =>
-  new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
 
 
 interface HomeProps {
@@ -82,11 +64,10 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   const [loading, setLoading] = useState(true);
   const { profile } = useAuth();
   const [notificacoesCount, setNotificacoesCount] = useState(0);
-  const [showNotifPanel, setShowNotifPanel] = useState(false);
-  const [notifSols, setNotifSols] = useState<NotifSol[]>([]);
-  const [notifLoading, setNotifLoading] = useState(false);
-  const [respondingId, setRespondingId] = useState<number | null>(null);
-  const notifPanelRef = useRef<HTMLDivElement>(null);
+  const [showNotifPopup, setShowNotifPopup]       = useState(false);
+  const [notifItems, setNotifItems]               = useState<{ id: number; nome: string; item: string }[]>([]);
+  const [notifLoading, setNotifLoading]           = useState(false);
+  const notifRef                                  = useRef<HTMLDivElement>(null);
 
   const { latitude: userLat, longitude: userLon, loading: locLoading, error: locError, requestLocation, clearLocation } = useGeolocation();
 
@@ -172,83 +153,35 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   useEffect(() => { fetchNotifCount(); }, [fetchNotifCount]);
 
   const handleBellClick = async () => {
-    if (showNotifPanel) {
-      setShowNotifPanel(false);
-      return;
-    }
-
-    // Abre o painel e ativa loading no mesmo batch (React 19 automatic batching)
-    setShowNotifPanel(true);
+    if (showNotifPopup) { setShowNotifPopup(false); return; }
+    setShowNotifPopup(true);
+    if (notifItems.length > 0 || notifLoading) return;
     setNotifLoading(true);
-
-    if (!profile?.id) {
-      setNotifLoading(false);
-      return;
-    }
-
-    const { data: solData } = await supabase
-      .from("solicitacao_aluguel")
-      .select("*")
-      .eq("idlocador", profile.id)
-      .eq("status", "pendente")
+    const { data: sols } = await supabase
+      .from("solicitacao_aluguel").select("idsolicitacao, iditem, idlocatario")
+      .eq("idlocador", profile?.id).eq("status", "pendente")
       .order("idsolicitacao", { ascending: false });
-
-    if (!solData || solData.length === 0) {
-      setNotifSols([]);
-      setNotifLoading(false);
-      return;
-    }
-
-    const itemIds = solData.map((s: any) => s.iditem);
-    const locatarioIds = solData.map((s: any) => s.idlocatario);
-
-    const [itemsRes, usersRes, fotosRes] = await Promise.all([
-      supabase.from("item").select("iditem, nome").in("iditem", itemIds),
-      supabase.from("users").select("id, fullName").in("id", locatarioIds),
-      supabase.from("fotoitem").select("iditem, url_foto").in("iditem", itemIds),
+    if (!sols || sols.length === 0) { setNotifItems([]); setNotifLoading(false); return; }
+    const [itemsRes, usersRes] = await Promise.all([
+      supabase.from("item").select("iditem, nome").in("iditem", sols.map((s: any) => s.iditem)),
+      supabase.from("users").select("id, fullName").in("id", sols.map((s: any) => s.idlocatario)),
     ]);
-
-    const merged: NotifSol[] = solData.map((s: any) => ({
-      idsolicitacao: s.idsolicitacao,
-      iditem: s.iditem,
-      idlocatario: s.idlocatario,
-      data_inicio_prevista: s.data_inicio_prevista,
-      data_fim_prevista: s.data_fim_prevista,
-      valor_total_previsto: s.valor_total_previsto,
-      item_nome: itemsRes.data?.find((i: any) => i.iditem === s.iditem)?.nome ?? "—",
-      locatario_nome: usersRes.data?.find((u: any) => u.id === s.idlocatario)?.fullName ?? "Locatário",
-      item_foto: fotosRes.data?.find((f: any) => f.iditem === s.iditem)?.url_foto,
-    }));
-
-    setNotifSols(merged);
+    setNotifItems(sols.map((s: any) => ({
+      id: s.idsolicitacao,
+      nome: usersRes.data?.find((u: any) => u.id === s.idlocatario)?.fullName ?? "Alguém",
+      item: itemsRes.data?.find((i: any) => i.iditem === s.iditem)?.nome ?? "item",
+    })));
     setNotifLoading(false);
   };
 
-  const handleResponderNotif = async (id: number, status: "aprovado" | "rejeitado") => {
-    if (respondingId !== null) return;
-    setRespondingId(id);
-    const { error } = await supabase
-      .from("solicitacao_aluguel")
-      .update({ status })
-      .eq("idsolicitacao", id)
-      .eq("status", "pendente");
-    if (!error) {
-      setNotifSols(prev => prev.filter(s => s.idsolicitacao !== id));
-      setNotificacoesCount(prev => Math.max(0, prev - 1));
-    }
-    setRespondingId(null);
-  };
-
-  // Fecha painel ao clicar fora
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target as Node)) {
-        setShowNotifPanel(false);
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node))
+        setShowNotifPopup(false);
     };
-    if (showNotifPanel) document.addEventListener("mousedown", handler);
+    if (showNotifPopup) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [showNotifPanel]);
+  }, [showNotifPopup]);
 
   useEffect(() => {
     supabase.from("categoria").select("*").order("nome_categoria").then(({ data }) => {
@@ -315,7 +248,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
         </div>
         <div className="flex items-center gap-4">
           {/* SINO DE NOTIFICAÇÕES */}
-          <div className="relative" ref={notifPanelRef}>
+          <div className="relative" ref={notifRef}>
             <button
               className="relative text-gray-400 hover:text-blue-600 transition"
               onClick={handleBellClick}
@@ -328,118 +261,36 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
               )}
             </button>
 
-            {/* PAINEL DROPDOWN */}
-            {showNotifPanel && (
-              <div className="absolute top-full right-0 mt-3 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                {/* Cabeçalho */}
-                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-blue-600" />
-                    <span className="font-bold text-gray-900 text-sm">Pedidos de Aluguel</span>
-                    {notificacoesCount > 0 && (
-                      <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                        {notificacoesCount}
-                      </span>
-                    )}
+            {showNotifPopup && (
+              <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-1">
+                  Pedidos pendentes
+                </p>
+                {notifLoading ? (
+                  <div className="px-4 pb-3 space-y-2">
+                    {[1, 2].map(i => (
+                      <div key={i} className="h-4 bg-gray-100 rounded animate-pulse" />
+                    ))}
                   </div>
-                  <button
-                    onClick={() => setShowNotifPanel(false)}
-                    className="text-gray-400 hover:text-gray-600 transition"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Conteúdo */}
-                <div className="max-h-[480px] overflow-y-auto">
-                  {notifLoading ? (
-                    <div className="p-4 space-y-3">
-                      {[1, 2].map(i => (
-                        <div key={i} className="animate-pulse flex gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-gray-200 flex-shrink-0" />
-                          <div className="flex-1 space-y-2 py-1">
-                            <div className="h-3 bg-gray-200 rounded w-2/3" />
-                            <div className="h-3 bg-gray-200 rounded w-1/2" />
-                            <div className="h-3 bg-gray-200 rounded w-1/3" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : notifSols.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <CheckCircle className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-gray-700">Tudo em dia!</p>
-                      <p className="text-xs text-gray-400 mt-1">Nenhum pedido aguardando resposta.</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-gray-50">
-                      {notifSols.map(sol => {
-                        const isResponding = respondingId === sol.idsolicitacao;
-                        return (
-                          <div key={sol.idsolicitacao} className="p-4">
-                            {/* Info do item */}
-                            <div className="flex gap-3 mb-3">
-                              <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0 overflow-hidden">
-                                {sol.item_foto ? (
-                                  <img src={sol.item_foto} alt={sol.item_nome} className="w-full h-full object-cover" />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <Package className="w-5 h-5 text-gray-400" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-bold text-gray-900 truncate">{sol.item_nome}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  Solicitado por <span className="font-semibold text-gray-700">{sol.locatario_nome}</span>
-                                </p>
-                                <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-400">
-                                  <Clock className="w-3 h-3" />
-                                  {fmtDate(sol.data_inicio_prevista)} → {fmtDate(sol.data_fim_prevista)}
-                                </div>
-                                <p className="text-sm font-bold text-blue-700 mt-0.5">
-                                  {fmtBRL(sol.valor_total_previsto)}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Botões aceitar/rejeitar */}
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleResponderNotif(sol.idsolicitacao, "rejeitado")}
-                                disabled={isResponding}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition disabled:opacity-50"
-                              >
-                                <XCircle className="w-3.5 h-3.5" />
-                                {isResponding ? "..." : "Recusar"}
-                              </button>
-                              <button
-                                onClick={() => handleResponderNotif(sol.idsolicitacao, "aprovado")}
-                                disabled={isResponding}
-                                className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition disabled:opacity-50"
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                {isResponding ? "..." : "Confirmar"}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Rodapé */}
-                {!notifLoading && (
-                  <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
-                    <button
-                      onClick={() => { setShowNotifPanel(false); onGoToChat(); }}
-                      className="w-full text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
-                    >
-                      Ver todas as solicitações no Chat →
-                    </button>
-                  </div>
+                ) : notifItems.length === 0 ? (
+                  <p className="text-xs text-gray-400 px-4 pb-4 pt-1">Nenhum pedido pendente.</p>
+                ) : (
+                  <ul className="pb-1">
+                    {notifItems.map(n => (
+                      <li key={n.id} className="px-4 py-2 text-sm text-gray-700 border-b border-gray-50 last:border-0">
+                        <span className="font-semibold text-gray-900">{n.nome}</span>
+                        <span className="text-gray-400"> solicitou </span>
+                        {n.item}
+                      </li>
+                    ))}
+                  </ul>
                 )}
+                <button
+                  onClick={() => { setShowNotifPopup(false); onGoToChat(); }}
+                  className="w-full py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition border-t border-gray-100"
+                >
+                  Ver no Chat →
+                </button>
               </div>
             )}
           </div>

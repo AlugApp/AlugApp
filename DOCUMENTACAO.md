@@ -1,6 +1,6 @@
 # AlugApp — Documentação Técnica
 
-> Ultima atualização: 10/06/2026  
+> Ultima atualização: 11/06/2026  
 > Plataforma: React 19 + Supabase + TailwindCSS
 
 ---
@@ -155,7 +155,11 @@ src/
 | `conteudo` | text | Texto da mensagem (pré-censurado) |
 | `criado_em` | timestamptz | Data/hora de envio |
 
-> Habilitar Realtime: `ALTER PUBLICATION supabase_realtime ADD TABLE mensagem;`
+> Habilitar Realtime (rodar no SQL Editor do Supabase):
+> ```sql
+> ALTER PUBLICATION supabase_realtime ADD TABLE mensagem;
+> ALTER PUBLICATION supabase_realtime ADD TABLE solicitacao_aluguel;
+> ```
 
 #### `avaliacao` — Avaliações de usuários
 | Coluna | Tipo | Descrição |
@@ -281,8 +285,21 @@ App
         ├── [MFA pendente]    → MfaChallenge
         └── [autenticado]
             ├── renderContent() → página atual
-            └── BottomNav
+            ├── BottomNav
+            └── Toast overlay (fixo top-4 right-4, z-200)
 ```
+
+**Sistema de notificações in-app (`App.tsx`):**
+- Estado global `toasts: Toast[]` em `AppContent` — qualquer evento pode chamar `showToast(message, type, subtitle?)`
+- Auto-dismiss após 6 segundos; botão ✕ para fechar manualmente
+- Dois canais Realtime separados (um por tabela — múltiplas tabelas no mesmo canal causam conflito):
+  - **`app-sol-notifs-{uid}`** — escuta `INSERT` e `UPDATE` em `solicitacao_aluguel`:
+    - INSERT → locador recebe: `"Nome solicitou Item"` / `"Acesse o Chat..."`
+    - UPDATE (sem filtro, checagem client-side) → locatário recebe aprovação, aguardando entrega, rejeição, conclusão; locador recebe confirmação de recebimento, devolução, cancelamento
+  - **`app-msg-notifs-{uid}`** — escuta `INSERT` em `mensagem`:
+    - Ignora mensagens do próprio usuário
+    - Verifica participação via query em `solicitacao_aluguel`
+    - Exibe `"Mensagem de Nome"` + prévia do conteúdo
 
 ---
 
@@ -336,7 +353,7 @@ Página principal, acessível após login.
 3. Exibe cards em grid responsivo (1/2/4 colunas)
 4. Persiste todos os filtros no `sessionStorage` para manter estado ao navegar
 
-**Sino de notificações (locador):** abre painel com solicitações pendentes e botões "Recusar" / "Confirmar" sem precisar abrir o Chat. Badge vermelho indica a contagem de pendentes.
+**Sino de notificações:** badge vermelho no ícone indica a contagem de pedidos pendentes (como locador). Ao clicar, abre um mini popup minimalista listando os pedidos pendentes no formato `"Nome solicitou Item"`, com link "Ver no Chat →" no rodapé. Não há botões de ação no popup — as ações ficam no Chat.
 
 ### 6.6 `DetalhesItem.tsx` — Detalhes do item
 
@@ -429,44 +446,45 @@ Painel de estatísticas com alternância entre visão **Locador** e **Locatário
 
 ### 6.13 `Chat.tsx` — Chat de solicitações
 
-Central de comunicação entre locador e locatário vinculada a cada solicitação de aluguel.
+Central de comunicação entre locador e locatário, organizada por pessoa (não por solicitação individual).
 
-#### Lista de conversas
-- Exibe todas as `solicitacao_aluguel` do usuário (como locador ou locatário), ordenadas pelo ID
-- Badge vermelho no avatar quando há ação pendente:
-  - Locador: status `pendente` (precisa aceitar/rejeitar) ou `aprovado` (precisa fotografar o item)
-  - Locatário: status `aguardando_entrega` (precisa confirmar recebimento)
-- Status colorido por conversa: Pendente (amarelo), Aprovado (azul), Ag. Entrega (laranja), Em Andamento (índigo), Concluído (verde), Rejeitado (vermelho), Cancelado (cinza)
+#### Lista de conversas — duas abas
+
+| Aba | Conteúdo |
+|-----|---------|
+| **Pedidos Recebidos** | Conversas onde o usuário é **locador** — agrupa todos os aluguéis recebidos de cada pessoa |
+| **Minhas Requisições** | Conversas onde o usuário é **locatário** — agrupa todos os aluguéis feitos para cada pessoa |
+
+- Cada entrada representa **uma pessoa**, não uma solicitação individual
+- Caso haja múltiplos aluguéis com a mesma pessoa, aparecem agrupados sob um único card (`+2 aluguéis`)
+- Badge vermelho indica ação pendente na aba (locador: `pendente` ou `aprovado`; locatário: `aguardando_entrega`)
+- Status exibido é o da solicitação mais recente
 
 #### Tela de conversa (detalhe)
-Exibe o card da solicitação no topo, seguido pelas mensagens em balões, com input habilitado na parte inferior.
 
-**Ações por status (card de solicitação):**
+Ao abrir uma conversa, exibe todos os aluguéis com aquela pessoa (cards de solicitação) seguidos pelo feed unificado de mensagens.
+
+**Cards de solicitação (um por aluguel, ordenados do mais antigo ao mais novo):**
 
 | Status | Visão Locador | Visão Locatário |
 |--------|--------------|-----------------|
 | `pendente` | Botões "Rejeitar" / "Aceitar" | "Aguardando resposta..." + "Cancelar Solicitação" |
-| `aprovado` | "Fotografar Estado do Item" (abre modal de upload) | "Aguardando locador registrar estado do item" |
-| `aguardando_entrega` | Foto registrada + "Aguardando confirmação" | Foto antes da entrega + "Confirmar Recebimento" (abre modal) |
-| `em_andamento` | Fotos de antes e recebimento + data prevista | Foto de antes + data prevista + botão "↩ Devolver Item" |
-| `concluido` | "Aluguel Concluído" | "Aluguel Concluído" |
-| `rejeitado` | "Solicitação Rejeitada" | "Solicitação Rejeitada" |
-| `cancelado` | "Solicitação Cancelada" | "Solicitação Cancelada" |
+| `aprovado` | "Fotografar Estado do Item" (modal de upload) | "Aguardando locador registrar estado do item" |
+| `aguardando_entrega` | Foto registrada + "Aguardando confirmação" | Foto antes da entrega + "Confirmar Recebimento" (modal) |
+| `em_andamento` | Fotos de antes e recebimento + data prevista | Foto de antes + data prevista + "↩ Devolver Item" |
+| `concluido` / `rejeitado` / `cancelado` | Status exibido, sem ações | Status exibido, sem ações |
+
+**Mensagens:**
+- Feed unificado de todas as mensagens de todos os aluguéis com aquela pessoa, em ordem cronológica
+- Mensagens novas são enviadas para a solicitação ativa mais recente
+- Realtime: canal por `idsolicitacao` para cada aluguel da conversa aberta
+- Censura automática via `censurarTexto()` antes do INSERT
+- Input desabilitado quando não há aluguel ativo
 
 **Modal de upload de foto:**
-- Aparece centralizado na tela ao fotografar estado ou confirmar recebimento
-- Input `type="file" accept="image/*" capture="environment"` — abre câmera no mobile
-- Preview da imagem selecionada antes de confirmar
-- Foto enviada ao Supabase Storage (bucket `items`, pasta `rental/`)
-- URL salva em `foto_antes_url` ou `foto_recebimento_url` da solicitação
-
-#### Mensagens em tempo real
-- Carrega o histórico de mensagens da tabela `mensagem` ao abrir a conversa
-- Subscrição Supabase Realtime via `postgres_changes` — mensagens chegam sem recarregar a página
-- Censura automática: `censurarTexto()` substitui palavras proibidas por `*` antes do INSERT
-- Chat habilitado para status ativos (`pendente`, `aprovado`, `aguardando_entrega`, `em_andamento`)
-- Chat desabilitado (input bloqueado) para status terminais (`concluido`, `cancelado`, `rejeitado`)
-- Auto-scroll para a última mensagem ao receber novas
+- Centralizado na tela (`fixed inset-0 flex items-center justify-center`)
+- `type="file" accept="image/*" capture="environment"` — abre câmera no mobile
+- Preview antes de confirmar; upload para Storage `items/rental/`
 
 ---
 
@@ -583,16 +601,53 @@ Home → clica "Ver Detalhes"
 [concluido] — estado terminal
 ```
 
-### 10.5 Chat em tempo real
+### 10.5 Chat em tempo real (conversas agrupadas)
 ```
-Usuário abre conversa no Chat
-→ SELECT mensagem WHERE idsolicitacao = X ORDER BY criado_em
-→ Subscrição Realtime: postgres_changes INSERT na tabela mensagem
-→ Usuário digita mensagem → Enter ou botão Send
+Usuário abre a aba "Pedidos Recebidos" ou "Minhas Requisições"
+→ SELECT solicitacao_aluguel WHERE idlocador = uid OU idlocatario = uid
+→ groupByOther(): agrupa por pessoa, ordena por idsolicitacao DESC
+→ Lista mostra uma entrada por pessoa (+ badge se ação pendente)
+
+Usuário abre uma conversa
+→ SELECT mensagem WHERE idsolicitacao IN (ids do grupo) ORDER BY criado_em
+→ Subscrição Realtime por canal por idsolicitacao (um canal por sol)
+→ Exibe cards de cada solicitação (mais antiga → mais nova) + divider ─── mensagens ───
+→ Feed unificado de mensagens do grupo
+
+Usuário envia mensagem
 → censurarTexto() substitui palavras proibidas
-→ INSERT INTO mensagem (idsolicitacao, idremetente, conteudo)
+→ INSERT INTO mensagem usando idsolicitacao da sol ativa mais recente
 → Realtime entrega para o outro participante sem reload
 → Auto-scroll para a última mensagem
+```
+
+### 10.6 Fluxo de notificações in-app
+```
+[Evento: nova solicitação]
+→ Realtime INSERT em solicitacao_aluguel
+→ newSol.idlocador === profile.id → showToast("Nome solicitou Item", 'info')
+
+[Evento: mudança de status]
+→ Realtime UPDATE em solicitacao_aluguel (sem filtro)
+→ newSol.idlocatario === profile.id:
+    aprovado → "Item aprovado!"
+    aguardando_entrega → "Pronto para entrega!"
+    rejeitado → "Solicitação rejeitada"
+    concluido → "Aluguel concluído"
+→ newSol.idlocador === profile.id:
+    em_andamento → "Locatário confirmou recebimento"
+    concluido → "Item devolvido"
+    cancelado → "Solicitação cancelada"
+
+[Evento: nova mensagem]
+→ Realtime INSERT em mensagem
+→ idremetente !== profile.id → verifica participação via query
+→ showToast("Mensagem de Nome", 'info', prévia do conteúdo)
+
+[Requisito de banco]
+→ ALTER PUBLICATION supabase_realtime ADD TABLE solicitacao_aluguel;
+→ ALTER PUBLICATION supabase_realtime ADD TABLE mensagem;
+(executar no SQL Editor do Supabase)
 ```
 
 ---
@@ -604,7 +659,7 @@ Usuário abre conversa no Chat
 | Pagamentos / cadastro de cartão | Placeholder (aba "Pagamentos" no Perfil) |
 | Histórico de Aluguéis | Botão existe, sem ação |
 | Central de Ajuda | Botão existe, sem ação |
-| Notificações push | Não implementado |
+| Notificações push (web/mobile) | Não implementado — notificações in-app via toast estão implementadas |
 | Avaliação pós-aluguel (criação) | Tabela existe, leitura funciona, formulário não existe |
 
 ---
