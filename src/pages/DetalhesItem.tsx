@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
-import { ArrowLeft, Star, MessageSquare, Package, ShoppingBag, ChevronLeft, ChevronRight, CheckCircle } from "lucide-react";
+import { ArrowLeft, Star, MessageSquare, Package, ShoppingBag, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 
 interface DetalhesProps {
   id: number;
@@ -521,6 +521,10 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
         </div>
         {user?.id === item.idlocador ? (
           <span className="text-sm text-gray-400 italic">Você é o proprietário</span>
+        ) : item.disponivel === false ? (
+          <span className="text-sm text-red-500 font-semibold flex items-center gap-1.5">
+            <XCircle className="w-5 h-5" /> Item indisponível
+          </span>
         ) : (
           <button
             onClick={() => { setShowAluguel(true); setSendMsg(null); }}

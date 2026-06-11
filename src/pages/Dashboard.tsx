@@ -11,10 +11,11 @@ interface DashboardProps {
   onGoHome: () => void;
   onGoToPerfil: () => void;
   onGoToMyAnnouncements: () => void;
+  onGoToChat: () => void;
 }
 
 interface Solicitacao {
-  id: number;
+  idsolicitacao: number;
   iditem: number;
   idlocador: number;
   idlocatario: number;
@@ -22,7 +23,6 @@ interface Solicitacao {
   data_fim_prevista: string;
   valor_total_previsto: number;
   status: string;
-  created_at: string;
   item?: { nome: string; idcategoria: number; categoria?: { nome_categoria: string } };
   locador_user?: { fullName: string };
   locatario_user?: { fullName: string };
@@ -94,7 +94,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.cls}`}>{s.label}</span>;
 }
 
-export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncements }: DashboardProps) {
+export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncements, onGoToChat }: DashboardProps) {
   const { user, profile } = useAuth();
   const [view, setView] = useState<"locador" | "locatario">("locador");
   const [year, setYear] = useState(new Date().getFullYear());
@@ -102,6 +102,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [totalItens, setTotalItens] = useState(0);
   const [mediaAvaliacao, setMediaAvaliacao] = useState<number | null>(null);
+  const [locatariosMap, setLocatariosMap] = useState<Record<number, string>>({});
 
   const loadData = useCallback(async () => {
     if (!profile?.id) return;
@@ -113,7 +114,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
           .from("solicitacao_aluguel")
           .select("*, item(nome, idcategoria, categoria(nome_categoria))")
           .eq("idlocador", profile.id)
-          .order("created_at", { ascending: false });
+          .order("idsolicitacao", { ascending: false });
         setSolicitacoes((sols as Solicitacao[]) ?? []);
 
         const { count } = await supabase
@@ -136,7 +137,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
           .from("solicitacao_aluguel")
           .select("*, item(nome, idcategoria, categoria(nome_categoria))")
           .eq("idlocatario", profile.id)
-          .order("created_at", { ascending: false });
+          .order("idsolicitacao", { ascending: false });
         setSolicitacoes((sols as Solicitacao[]) ?? []);
         setTotalItens(0);
         setMediaAvaliacao(null);
@@ -148,10 +149,22 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  useEffect(() => {
+    if (view !== "locador") return;
+    const pendentes = solicitacoes.filter(s => s.status === "pendente");
+    if (pendentes.length === 0) { setLocatariosMap({}); return; }
+    const ids = Array.from(new Set(pendentes.map(s => s.idlocatario)));
+    supabase.from("users").select("id, fullName").in("id", ids).then(({ data }) => {
+      const map: Record<number, string> = {};
+      data?.forEach((u: any) => { map[u.id] = u.fullName; });
+      setLocatariosMap(map);
+    });
+  }, [solicitacoes, view]);
+
   // ── Derivações ───────────────────────────────────────────────────────────────
   const ativas = ["aprovado", "concluido"];
   const solAtivas = solicitacoes.filter(s => ativas.includes(s.status));
-  const solDoAno = solAtivas.filter(s => new Date(s.created_at).getFullYear() === year);
+  const solDoAno = solAtivas.filter(s => new Date(s.data_inicio_prevista + "T12:00:00").getFullYear() === year);
 
   const faturamentoTotal = solAtivas.reduce((s, r) => s + Number(r.valor_total_previsto), 0);
   const faturamentoAno   = solDoAno.reduce((s, r) => s + Number(r.valor_total_previsto), 0);
@@ -163,7 +176,8 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
   const mediaDias = solAtivas.length > 0 ? (diasTotais / solAtivas.length).toFixed(1) : "0";
   const mediaTicket = solAtivas.length > 0 ? faturamentoTotal / solAtivas.length : 0;
 
-  const pendentes  = solicitacoes.filter(s => s.status === "pendente").length;
+  const solPendentes = solicitacoes.filter(s => s.status === "pendente");
+  const pendentes  = solPendentes.length;
   const aprovadas  = solicitacoes.filter(s => s.status === "aprovado").length;
   const rejeitadas = solicitacoes.filter(s => s.status === "rejeitado").length;
   const concluidas = solicitacoes.filter(s => s.status === "concluido").length;
@@ -174,7 +188,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
   // Mensal do ano selecionado
   const porMes = Array.from({ length: 12 }, (_, m) => {
     const val = solDoAno
-      .filter(s => new Date(s.created_at).getMonth() === m)
+      .filter(s => new Date(s.data_inicio_prevista + "T12:00:00").getMonth() === m)
       .reduce((acc, s) => acc + Number(s.valor_total_previsto), 0);
     return { label: MESES_ABREV[m], value: val };
   });
@@ -188,7 +202,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
   const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const catMax = topCats[0]?.[1] ?? 1;
 
-  const anos = Array.from(new Set(solicitacoes.map(s => new Date(s.created_at).getFullYear()))).sort((a, b) => b - a);
+  const anos = Array.from(new Set(solicitacoes.map(s => new Date(s.data_inicio_prevista + "T12:00:00").getFullYear()))).sort((a, b) => b - a);
   if (!anos.includes(new Date().getFullYear())) anos.unshift(new Date().getFullYear());
 
   const recentes = [...solicitacoes].slice(0, 6);
@@ -242,6 +256,70 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
           </div>
         ) : (
           <>
+            {/* ── NOTIFICAÇÕES LOCADOR ─────────────────────────────────── */}
+            {view === "locador" && solPendentes.length > 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    <h3 className="font-bold text-yellow-800 text-sm">
+                      {solPendentes.length} pedido{solPendentes.length > 1 ? "s" : ""} aguardando sua resposta
+                    </h3>
+                  </div>
+                  <button
+                    onClick={onGoToChat}
+                    className="text-xs font-semibold text-yellow-700 bg-yellow-100 hover:bg-yellow-200 px-3 py-1.5 rounded-lg transition"
+                  >
+                    Ver no Chat →
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {solPendentes.map(s => (
+                    <div
+                      key={s.idsolicitacao}
+                      className="bg-white rounded-xl p-3 border border-yellow-100 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {(s.item as any)?.nome ?? `Item #${s.iditem}`}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {locatariosMap[s.idlocatario] ? (
+                            <span className="font-medium text-gray-700">{locatariosMap[s.idlocatario]} · </span>
+                          ) : null}
+                          {fmtDate(s.data_inicio_prevista)} → {fmtDate(s.data_fim_prevista)}
+                        </p>
+                        <p className="text-xs font-bold text-blue-700 mt-0.5">
+                          {fmtBRL(Number(s.valor_total_previsto))}
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-700 flex-shrink-0 border border-yellow-200">
+                        Pendente
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── NOTIFICAÇÕES LOCATÁRIO ───────────────────────────────── */}
+            {view === "locatario" && solPendentes.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                  <p className="text-sm font-semibold text-blue-800">
+                    Você tem {solPendentes.length} pedido{solPendentes.length > 1 ? "s" : ""} aguardando resposta do locador.
+                  </p>
+                </div>
+                <button
+                  onClick={onGoToChat}
+                  className="text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-lg transition flex-shrink-0"
+                >
+                  Ver no Chat →
+                </button>
+              </div>
+            )}
+
             {/* ── KPIs LOCADOR ─────────────────────────────────────────── */}
             {view === "locador" && (
               <>
@@ -345,7 +423,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
                 ) : (
                   <div className="space-y-2.5">
                     {recentes.map(s => (
-                      <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition">
+                      <div key={s.idsolicitacao} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 transition">
                         <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
                           <Package className="w-4 h-4 text-blue-600" />
                         </div>
@@ -387,7 +465,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
                     </thead>
                     <tbody>
                       {anos.map(y => {
-                        const ySols = solicitacoes.filter(s => new Date(s.created_at).getFullYear() === y);
+                        const ySols = solicitacoes.filter(s => new Date(s.data_inicio_prevista + "T12:00:00").getFullYear() === y);
                         const yAtivas = ySols.filter(s => ativas.includes(s.status));
                         const yTotal = yAtivas.reduce((acc, s) => acc + Number(s.valor_total_previsto), 0);
                         const yTicket = yAtivas.length > 0 ? yTotal / yAtivas.length : 0;

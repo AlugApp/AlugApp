@@ -262,6 +262,7 @@ const AppContent: React.FC = () => {
           onGoHome={() => navigate('home')}
           onGoToPerfil={() => navigate('perfil')}
           onGoToMyAnnouncements={() => navigate('my-announcements')}
+          onGoToChat={() => navigate('chat')}
         />
       );
     }
