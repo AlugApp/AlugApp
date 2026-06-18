@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { useGeolocation } from "../hooks/useGeolocation";
 import { geocodeAddress, buildAddressQuery } from "../lib/geocoding";
-import { ArrowLeft, Plus, X, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Plus, X, Loader2, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const DIAS_SEMANA = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
@@ -104,6 +105,7 @@ const ADICIONAIS_OPCOES = [
 
 export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const { user, profile } = useAuth();
+  const { latitude: gpsLat, longitude: gpsLon, loading: gpsLoading, error: gpsError, requestLocation } = useGeolocation();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,6 +126,11 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
     valor_aluguel_diario: "",
     estado: "",
   });
+
+  useEffect(() => {
+    requestLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -247,9 +254,9 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       ? `[${outraCategoria.trim()}] ${formData.descricao}`.trim()
       : formData.descricao;
 
-    let latitude: number | null = null;
-    let longitude: number | null = null;
-    if (profile) {
+    let latitude: number | null = gpsLat;
+    let longitude: number | null = gpsLon;
+    if ((latitude == null || longitude == null) && profile) {
       const query = buildAddressQuery(profile);
       if (query) {
         const coords = await geocodeAddress(query);
@@ -327,6 +334,11 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
           <ArrowLeft className="w-5 h-5 text-gray-700" />
         </button>
         <h1 className="text-lg font-bold text-gray-900">Editar Anúncio</h1>
+        <div className="ml-auto flex items-center gap-1.5 text-xs">
+          {gpsLoading && <><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" /><span className="text-gray-400">Capturando localização...</span></>}
+          {!gpsLoading && gpsLat != null && <><span className="w-1.5 h-1.5 rounded-full bg-green-500" /><MapPin className="w-3 h-3 text-green-500" /><span className="text-green-600 font-medium">Localização capturada</span></>}
+          {!gpsLoading && gpsLat == null && gpsError && <><span className="w-1.5 h-1.5 rounded-full bg-orange-400" /><span className="text-orange-500">Sem localização</span></>}
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto py-6 px-4">
