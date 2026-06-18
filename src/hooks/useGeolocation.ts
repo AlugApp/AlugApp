@@ -7,6 +7,24 @@ interface GeolocationState {
   loading: boolean;
 }
 
+export interface Coords {
+  latitude: number;
+  longitude: number;
+}
+
+function describeError(err: GeolocationPositionError): string {
+  switch (err.code) {
+    case err.PERMISSION_DENIED:
+      return 'Permissão negada pelo navegador. Clique no ícone de cadeado na barra de endereço e permita a localização.';
+    case err.POSITION_UNAVAILABLE:
+      return 'Localização indisponível. Verifique se os serviços de localização estão ativos em Configurações do Windows → Privacidade → Localização.';
+    case err.TIMEOUT:
+      return 'Tempo esgotado ao obter a localização. Tente novamente.';
+    default:
+      return 'Erro ao obter localização.';
+  }
+}
+
 export function useGeolocation() {
   const [state, setState] = useState<GeolocationState>({
     latitude: null,
@@ -15,45 +33,39 @@ export function useGeolocation() {
     loading: false,
   });
 
-  const requestLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setState(s => ({ ...s, error: 'Geolocalização não suportada neste dispositivo.' }));
-      return;
-    }
-    setState(s => ({ ...s, loading: true, error: null }));
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setState({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          error: null,
-          loading: false,
-        });
-      },
-      (err) => {
-        let msg: string;
-        switch (err.code) {
-          case err.PERMISSION_DENIED:
-            msg = 'Permissão negada pelo navegador. Clique no ícone de cadeado na barra de endereço e permita a localização.';
-            break;
-          case err.POSITION_UNAVAILABLE:
-            msg = 'Localização indisponível. Verifique se os serviços de localização estão ativos em Configurações do Windows → Privacidade → Localização.';
-            break;
-          case err.TIMEOUT:
-            msg = 'Tempo esgotado. Tente novamente.';
-            break;
-          default:
-            msg = 'Erro ao obter localização.';
-        }
-        setState(s => ({ ...s, error: msg, loading: false }));
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }
-    );
+  // Retorna uma Promise com as coordenadas (ou null em caso de falha).
+  // Permite que o chamador *aguarde* o GPS resolver — essencial no submit de um anúncio.
+  const getPosition = useCallback((): Promise<Coords | null> => {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        setState(s => ({ ...s, error: 'Geolocalização não suportada neste dispositivo.', loading: false }));
+        resolve(null);
+        return;
+      }
+      setState(s => ({ ...s, loading: true, error: null }));
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          const c = { latitude: coords.latitude, longitude: coords.longitude };
+          console.log('[geo] posição obtida:', c, 'precisão:', Math.round(coords.accuracy), 'm');
+          setState({ ...c, error: null, loading: false });
+          resolve(c);
+        },
+        (err) => {
+          const msg = describeError(err);
+          console.warn('[geo] falha:', err.code, msg);
+          setState(s => ({ ...s, error: msg, loading: false }));
+          resolve(null);
+        },
+        { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 }
+      );
+    });
   }, []);
+
+  const requestLocation = useCallback(() => { void getPosition(); }, [getPosition]);
 
   const clearLocation = useCallback(() => {
     setState({ latitude: null, longitude: null, error: null, loading: false });
   }, []);
 
-  return { ...state, requestLocation, clearLocation };
+  return { ...state, getPosition, requestLocation, clearLocation };
 }

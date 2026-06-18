@@ -143,7 +143,7 @@ function CalendarioDisponibilidade({
 
 export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const { user, profile } = useAuth();
-  const { latitude: gpsLat, longitude: gpsLon, loading: gpsLoading, error: gpsError, requestLocation } = useGeolocation();
+  const { latitude: gpsLat, loading: gpsLoading, error: gpsError, requestLocation, getPosition } = useGeolocation();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -250,17 +250,28 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     setSubmitting(true);
     setMsg(null);
 
-    // Usa GPS do dispositivo (capturado em background ao abrir o form)
-    // Fallback: geocodificação pelo endereço do perfil
-    let latitude: number | null = gpsLat;
-    let longitude: number | null = gpsLon;
-    if ((latitude == null || longitude == null) && profile) {
+    // Aguarda o GPS do dispositivo resolver (essencial: não salvar sem coordenadas).
+    // Fallback: geocodificação pelo endereço do perfil.
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    const gps = await getPosition();
+    if (gps) {
+      latitude = gps.latitude;
+      longitude = gps.longitude;
+    } else if (profile) {
       const query = buildAddressQuery(profile);
       if (query) {
         const coords = await geocodeAddress(query);
         if (coords) { latitude = coords.latitude; longitude = coords.longitude; }
       }
     }
+
+    if (latitude == null || longitude == null) {
+      setMsg({ type: "error", text: "Não foi possível obter a localização. Permita o acesso à localização e tente novamente." });
+      setSubmitting(false);
+      return;
+    }
+    console.log('[anuncio] salvando com coordenadas:', latitude, longitude);
 
     const { data: itemCreated, error } = await supabase
       .from("item")

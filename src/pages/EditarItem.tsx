@@ -105,7 +105,7 @@ const ADICIONAIS_OPCOES = [
 
 export default function EditarItem({ id, onGoBack }: EditarItemProps) {
   const { user, profile } = useAuth();
-  const { latitude: gpsLat, longitude: gpsLon, loading: gpsLoading, error: gpsError, requestLocation } = useGeolocation();
+  const { latitude: gpsLat, loading: gpsLoading, error: gpsError, requestLocation, getPosition } = useGeolocation();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -254,14 +254,22 @@ export default function EditarItem({ id, onGoBack }: EditarItemProps) {
       ? `[${outraCategoria.trim()}] ${formData.descricao}`.trim()
       : formData.descricao;
 
-    let latitude: number | null = gpsLat;
-    let longitude: number | null = gpsLon;
-    if ((latitude == null || longitude == null) && profile) {
+    // Aguarda o GPS resolver; fallback para geocodificação do endereço do perfil.
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+    const gps = await getPosition();
+    if (gps) {
+      latitude = gps.latitude;
+      longitude = gps.longitude;
+    } else if (profile) {
       const query = buildAddressQuery(profile);
       if (query) {
         const coords = await geocodeAddress(query);
         if (coords) { latitude = coords.latitude; longitude = coords.longitude; }
       }
+    }
+    if (latitude != null && longitude != null) {
+      console.log('[editar] atualizando coordenadas:', latitude, longitude);
     }
 
     const { data, error: updateError } = await supabase

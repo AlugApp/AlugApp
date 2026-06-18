@@ -132,13 +132,28 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   };
 
   // Filtragem de proximidade client-side sobre os itens já carregados
+  const proximityActive = !!(proximoRaio && userLat != null && userLon != null);
+
   const displayedItems = useMemo(() => {
-    if (!proximoRaio || userLat == null || userLon == null) return items;
+    if (!proximityActive) return items;
+    console.log(`[proximidade] busca em (${userLat}, ${userLon}), raio ${proximoRaio}km, ${items.length} itens carregados`);
     return items.filter(item => {
-      if (item.latitude == null || item.longitude == null) return false;
-      return haversineKm(userLat, userLon, item.latitude, item.longitude) <= proximoRaio;
+      if (item.latitude == null || item.longitude == null) {
+        console.log(`[proximidade] "${item.nome}" SEM coordenadas → oculto`);
+        return false;
+      }
+      const dist = haversineKm(userLat!, userLon!, item.latitude, item.longitude);
+      const dentro = dist <= proximoRaio!;
+      console.log(`[proximidade] "${item.nome}" → ${dist.toFixed(2)}km ${dentro ? "✓ dentro" : "✗ fora"}`);
+      return dentro;
     });
-  }, [items, proximoRaio, userLat, userLon]);
+  }, [items, proximoRaio, userLat, userLon, proximityActive]);
+
+  // Itens ocultados por não terem coordenadas (criados antes da migração / sem GPS)
+  const itensSemCoordenadas = useMemo(
+    () => (proximityActive ? items.filter(i => i.latitude == null || i.longitude == null).length : 0),
+    [items, proximityActive]
+  );
 
   const fetchNotifCount = useCallback(() => {
     if (!profile?.id) return;
@@ -572,6 +587,17 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
             >
               Tentar novamente
             </button>
+          </div>
+        )}
+
+        {/* AVISO: itens ocultados por não terem localização cadastrada */}
+        {proximityActive && itensSemCoordenadas > 0 && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <MapPin className="w-4 h-4 text-blue-400 flex-shrink-0" />
+            <p className="text-xs text-blue-600 flex-1">
+              {itensSemCoordenadas} anúncio(s) sem localização cadastrada não aparecem no filtro de proximidade.
+              Anúncios criados antes da atualização precisam ser reeditados e salvos para registrar a localização.
+            </p>
           </div>
         )}
 
