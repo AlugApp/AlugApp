@@ -1,10 +1,10 @@
 # AlugApp
 
-> Plataforma web para aluguel de itens entre moradores de condomínio, desenvolvida como Projeto Integrador II no Centro Universitário de Brasília (CEUB).
+> Plataforma web para aluguel de itens entre pessoas, desenvolvida como Projeto Integrador II no Centro Universitário de Brasília (CEUB).
 
 ## Sobre o Projeto
 
-O **AlugApp** conecta moradores de um mesmo condomínio para que possam alugar itens entre si — como ferramentas, equipamentos esportivos, eletrônicos e outros. O objetivo é promover o compartilhamento dentro da comunidade, reduzindo custos e o desperdício de itens subutilizados.
+O **AlugApp** conecta pessoas para que possam alugar itens entre si — como ferramentas, equipamentos esportivos, eletrônicos e outros. O objetivo é promover o compartilhamento dentro da comunidade, reduzindo custos e o desperdício de itens subutilizados.
 
 ### Funcionalidades
 
