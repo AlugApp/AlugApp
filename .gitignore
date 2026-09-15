@@ -30,3 +30,23 @@ yarn-error.log*
 .env.production.local
 .vercel
 .env*.local
+
+# ── Mobile (Capacitor / Android) ─────────────────────────────────────────────
+# Toolchain baixada localmente (JDK + Android SDK), ~2 GB. Nao versionar.
+/mobile/.toolchain
+/mobile/node_modules
+# Assets web copiados do build da raiz — gerados por `npx cap sync`.
+/mobile/android/app/src/main/assets/public
+/mobile/android/app/src/main/assets/capacitor.config.json
+/mobile/android/app/src/main/assets/capacitor.plugins.json
+/mobile/android/local.properties
+/mobile/android/.gradle
+/mobile/android/build
+/mobile/android/app/build
+/mobile/android/capacitor-cordova-android-plugins
+# SEGREDOS DE ASSINATURA — nunca versionar.
+/mobile/*.keystore
+/mobile/*.jks
+/mobile/keystore.properties
+# Artefatos publicaveis
+/mobile/dist

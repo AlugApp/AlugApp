@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AlugApp</string>
+    <string name="title_activity_main">AlugApp</string>
+    <string name="package_name">com.alugapp.app</string>
+    <string name="custom_url_scheme">com.alugapp.app</string>
+</resources>

@@ -1,0 +1,21 @@
+{
+  "name": "alugapp-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Empacotamento Android (Capacitor) do AlugApp. O app web da raiz e' compilado em ../build e embarcado aqui.",
+  "scripts": {
+    "setup:toolchain": "node scripts/setup-toolchain.mjs",
+    "sync": "cap sync android",
+    "build:android": "node scripts/build.mjs aab",
+    "build:apk": "node scripts/build.mjs apk",
+    "open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  }
+}
