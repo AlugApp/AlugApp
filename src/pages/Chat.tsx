@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
 import { censurarTexto } from '../lib/censura';
-import { ArrowLeft, Send, CheckCircle, XCircle, MessageSquare, Clock, Camera } from 'lucide-react';
+import { ArrowLeft, Send, CheckCircle, MessageSquare, Clock, Camera } from 'lucide-react';
 
 interface Solicitacao {
   idsolicitacao: number;
@@ -93,7 +93,7 @@ function groupByOther(
 }
 
 export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: ChatProps) {
-  const { profile } = useAuth();
+  const { profile, isAdmin } = useAuth();
 
   const [solicitacoes, setSolicitacoes]   = useState<Solicitacao[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -156,6 +156,65 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
   }, [profile?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Abre conversa direta iniciada pelo administrador
+  useEffect(() => {
+    const targetUserIdStr = sessionStorage.getItem('open_chat_user_id');
+    if (!targetUserIdStr || !profile?.id || loading) return;
+    const targetUserId = Number(targetUserIdStr);
+    sessionStorage.removeItem('open_chat_user_id');
+    sessionStorage.removeItem('open_chat_user_name');
+
+    const existingGroup =
+      groupByOther(solicitacoes, 'locador').find((g) => g.otherId === targetUserId) ||
+      groupByOther(solicitacoes, 'locatario').find((g) => g.otherId === targetUserId);
+
+    if (existingGroup) {
+      openConversa(existingGroup);
+    } else {
+      (async () => {
+        const { data: anyItem } = await supabase.from('item').select('iditem, nome').limit(1).maybeSingle();
+        if (!anyItem) return;
+        const today = new Date().toISOString().split('T')[0];
+        const { data: newSol } = await supabase
+          .from('solicitacao_aluguel')
+          .insert({
+            iditem: anyItem.iditem,
+            idlocador: profile.id,
+            idlocatario: targetUserId,
+            data_inicio_prevista: today,
+            data_fim_prevista: today,
+            valor_total_previsto: 0,
+            status: 'em_andamento',
+          })
+          .select()
+          .single();
+
+        if (newSol) {
+          await load();
+          const { data: targetUser } = await supabase
+            .from('users')
+            .select('id, fullName, avatar_url')
+            .eq('id', targetUserId)
+            .single();
+
+          setSelectedConversa({
+            otherId: targetUserId,
+            otherUser: targetUser ?? null,
+            myRole: 'locador',
+            solicitacoes: [
+              {
+                ...newSol,
+                item: { nome: 'Canal Direto de Moderação' },
+                locador_user: profile as any,
+                locatario_user: targetUser,
+              },
+            ],
+          });
+        }
+      })();
+    }
+  }, [loading, profile?.id, solicitacoes]);
 
   // Sincroniza solicitacoes da conversa aberta quando o estado global muda
   useEffect(() => {
@@ -328,6 +387,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
   if (selectedConversa) {
     const { otherUser, myRole, solicitacoes: convSols } = selectedConversa;
     const chatAtivo = convSols.some(s => CHAT_ATIVO_STATUS.has(s.status));
+    const canChat = chatAtivo || isAdmin;
 
     return (
       <div className="fixed top-0 left-0 right-0 bottom-16 bg-gray-50 flex flex-col">
@@ -519,7 +579,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
           <div className="px-4 py-3 space-y-2">
             {mensagens.length === 0 && (
               <p className="text-center text-xs text-gray-400 py-4">
-                {chatAtivo ? 'Nenhuma mensagem ainda. Diga olá!' : 'Sem mensagens nesta conversa.'}
+                {canChat ? 'Nenhuma mensagem ainda. Diga olá!' : 'Sem mensagens nesta conversa.'}
               </p>
             )}
             {mensagens.map(msg => {
@@ -547,8 +607,8 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
         <div className="flex-shrink-0 bg-white border-t border-gray-200 px-3 py-2.5 flex gap-2 items-center">
           <input
             type="text"
-            placeholder={chatAtivo ? 'Digite uma mensagem...' : 'Sem aluguel ativo'}
-            disabled={!chatAtivo || sendingMsg}
+            placeholder={canChat ? (isAdmin && !chatAtivo ? 'Moderação: Digite como Administrador...' : 'Digite uma mensagem...') : 'Sem aluguel ativo'}
+            disabled={!canChat || sendingMsg}
             value={msgInput}
             onChange={e => setMsgInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
@@ -556,7 +616,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
           />
           <button
             onClick={handleSend}
-            disabled={!chatAtivo || !msgInput.trim() || sendingMsg}
+            disabled={!canChat || !msgInput.trim() || sendingMsg}
             className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white disabled:opacity-40 transition hover:bg-blue-700 flex-shrink-0"
           >
             <Send className="w-4 h-4" />

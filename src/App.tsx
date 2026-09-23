@@ -15,11 +15,12 @@ import EditarItem from './pages/EditarItem';
 import CompletarPerfil from './pages/CompletarPerfil';
 import Dashboard from './pages/Dashboard';
 import Chat from './pages/Chat';
+import Admin from './pages/Admin';
 import BottomNav from './components/BottomNav';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
-type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat';
+type AppMode = 'home' | 'announce' | 'details' | 'perfil' | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat' | 'admin';
 
 interface Toast {
   id: string;
@@ -99,10 +100,10 @@ const MfaChallenge: React.FC<{
 
 // ─── Conteúdo principal ───────────────────────────────────────────────────────
 
-const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar-perfil', 'my-announcements', 'edit-item', 'dashboard', 'chat'];
+const VALID_MODES: AppMode[] = ['home', 'announce', 'details', 'perfil', 'editar-perfil', 'my-announcements', 'edit-item', 'dashboard', 'chat', 'admin'];
 
 const AppContent: React.FC = () => {
-  const { session, loading, signOut, profile } = useAuth();
+  const { session, loading, signOut, profile, isAdmin } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>('login');
 
   // ── Toast notifications ───────────────────────────────────────────────────
@@ -344,6 +345,7 @@ const AppContent: React.FC = () => {
           onLogout={() => navigate('home')}
           onGoToEditar={() => navigate('editar-perfil')}
           onGoToMyAnnouncements={() => navigate('my-announcements')}
+          onGoToAdmin={() => navigate('admin')}
         />
       );
     }
@@ -386,6 +388,24 @@ const AppContent: React.FC = () => {
           onGoBack={() => navigate('home')}
           onGoToPerfil={() => navigate('perfil')}
           onGoToMyAnnouncements={() => navigate('my-announcements')}
+        />
+      );
+    }
+    if (mode === 'admin') {
+      if (!isAdmin) {
+        navigate('home');
+        return null;
+      }
+      return (
+        <Admin
+          onGoBack={() => navigate('home')}
+          onGoToPerfil={() => navigate('perfil')}
+          onGoToChatWithUser={(targetUserId, targetUserName) => {
+            sessionStorage.setItem('open_chat_user_id', String(targetUserId));
+            sessionStorage.setItem('open_chat_user_name', targetUserName);
+            navigate('chat');
+          }}
+          onOpenItem={(id) => goToDetails(id)}
         />
       );
     }

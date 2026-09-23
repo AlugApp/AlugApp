@@ -102,9 +102,16 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
 
   const handleOAuth = async () => {
+    const redirectUrl = process.env.REACT_APP_SITE_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     });
     if (error) setMessage({ type: 'error', text: 'Erro ao autenticar com Google.' });
   };

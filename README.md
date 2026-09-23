@@ -8,14 +8,16 @@ O **AlugApp** conecta pessoas para que possam alugar itens entre si — como fer
 
 ### Funcionalidades
 
-- Cadastro e login de moradores
+- Cadastro e login de moradores (e-mail/senha e Google OAuth com callback normalizado)
 - Listagem de itens disponíveis com filtros por categoria, preço e período
 - Busca por nome e descrição
 - Publicação de itens para aluguel com foto e valores por dia, semana e mês
 - Tela de detalhes do item com solicitação de aluguel
-- Perfil do morador com informações pessoais, segurança e pagamentos
+- Perfil do morador com informações pessoais, segurança, MFA e pagamentos
 - Edição de perfil integrada ao banco de dados
 - Alteração de senha com verificação da senha atual
+- Chat em tempo real com controle de status e fotos de vistoria
+- **Painel de Administração (RBAC):** moderação de anúncios, banimento protegido de contas, ajuste de preços/descontos e canal direto de atendimento
 - Encerramento de sessão
 
 ---
@@ -88,7 +90,15 @@ Veja a descrição completa, preço, localização e informações do proprietá
 Clique em **Anunciar Item** no cabeçalho da Home. Preencha o formulário com título, categoria, descrição, preços e foto do item.
 
 ### 6. Perfil
-Acesse seu perfil pelo ícone na barra inferior. Visualize e edite suas informações pessoais, altere sua senha ou encerre a sessão.
+Acesse seu perfil pelo ícone na barra inferior. Visualize e edite suas informações pessoais, altere sua senha ou encerre a sessão. Usuários administradores contam ainda com o atalho exclusivo para o Painel de Administração.
+
+### 7. Painel de Administração (Acesso Restrito)
+Disponível exclusivamente para contas com privilégios de administrador:
+- **Moderação de Anúncios:** visualização geral e exclusão forçada de itens com limpeza em cascata.
+- **Moderação de Usuários:** gestão de contas com banimento/desbanimento e proteção obrigatória impedindo o banimento de administradores.
+- **Promoção de Administradores:** capacidade de promover outros usuários para o papel de administrador, exigindo reautenticação obrigatória (senha ou validação OAuth).
+- **Gestão de Preços e Descontos:** ajuste manual dos valores diário, semanal, mensal e aplicação de porcentagem promocional.
+- **Comunicação Direta:** abertura de chat com qualquer usuário cadastrado na plataforma.
 
 ---
 
@@ -102,8 +112,11 @@ src/
 │   ├── Home.tsx           # Tela principal com listagem de itens
 │   ├── DetalhesItem.tsx   # Detalhes de um item específico
 │   ├── CadastrarItem.tsx  # Formulário para anunciar item
-│   ├── Perfil.tsx         # Perfil do morador
-│   └── EditarPerfil.tsx   # Edição de dados do perfil
+│   ├── Perfil.tsx         # Perfil do morador e atalho para Admin
+│   ├── EditarPerfil.tsx   # Edição de dados do perfil
+│   ├── Chat.tsx           # Chat em tempo real
+│   ├── Dashboard.tsx      # Dashboard estatístico
+│   └── Admin.tsx          # Painel Administrativo completo (RBAC)
 ├── App.tsx                # Controle de navegação entre telas
 └── index.css              # Estilos globais
 ```

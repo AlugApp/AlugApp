@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabaseClient';
 
 type AppMode =
   | 'home' | 'announce' | 'details' | 'perfil'
-  | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat';
+  | 'editar-perfil' | 'my-announcements' | 'edit-item' | 'dashboard' | 'chat' | 'admin';
 
 interface BottomNavProps {
   mode: AppMode;

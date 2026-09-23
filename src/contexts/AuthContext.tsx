@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
 import { decrypt } from '../lib/crypto';
+import { isAdmin as checkIsAdmin, isUserBanned } from '../lib/admin';
 
 export interface UserProfile {
   id?: number;
@@ -20,6 +21,9 @@ export interface UserProfile {
   estado?: string;
   birthDate?: string;
   avatar_url?: string;
+  role?: string;
+  is_admin?: boolean;
+  is_banned?: boolean;
 }
 
 interface AuthContextType {
@@ -27,6 +31,7 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
+  isAdmin: boolean;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -42,6 +47,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initializedRef = useRef(false);
   const hasSessionRef = useRef(false);
 
+  const cleanOAuthUrl = () => {
+    if (
+      typeof window !== 'undefined' &&
+      (window.location.hash.includes('access_token=') || window.location.search.includes('code='))
+    ) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  };
+
   const fetchProfile = async (authId: string) => {
     const { data } = await supabase
       .from('users')
@@ -50,6 +64,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
     if (data) {
       data.cpf = decrypt(data.cpf ?? '');
+      // Verificação de banimento
+      const banned = isUserBanned(data.email) || isUserBanned(data.id) || isUserBanned(data.auth_id) || data.is_banned;
+      if (banned) {
+        alert('Sua conta foi suspensa por decisão da moderação do AlugApp.');
+        await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        return;
+      }
     }
     setProfile(data ?? null);
   };
@@ -72,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
+        cleanOAuthUrl();
         hasSessionRef.current = true;
         fetchProfile(s.user.id).finally(() => {
           initializedRef.current = true;
@@ -113,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
+        cleanOAuthUrl();
         hasSessionRef.current = true;
         setLoading(true);
         fetchProfile(s.user.id).finally(() => {
@@ -125,8 +151,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const isUserAdmin = checkIsAdmin(user, profile);
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, refreshProfile, signOut }}>
+    <AuthContext.Provider value={{ session, user, profile, loading, isAdmin: isUserAdmin, refreshProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );

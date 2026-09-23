@@ -21,9 +21,16 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
 
   const handleOAuth = async (provider: 'google') => {
     setMessage(null);
+    const redirectUrl = process.env.REACT_APP_SITE_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${window.location.origin}/` },
+      options: {
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     });
     if (error) setMessage({ type: 'error', text: 'Erro ao autenticar. Tente novamente.' });
   };

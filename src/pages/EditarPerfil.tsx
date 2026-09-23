@@ -4,9 +4,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { decrypt } from "../lib/crypto";
 import {
   ArrowLeft,
-  Home as HomeIcon,
-  PlusCircle,
-  MessageSquare,
   User,
   Loader2,
   X,

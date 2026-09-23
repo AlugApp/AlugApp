@@ -3,12 +3,8 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import {
   Package,
-  Home as HomeIcon,
   PlusCircle,
-  MessageSquare,
-  User,
   Trash2,
-  LogOut,
 } from "lucide-react";
 
 interface MeusAnunciosProps {
@@ -31,7 +27,7 @@ interface Item {
 }
 
 export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, onOpenItem, onEditItem }: MeusAnunciosProps) {
-  const { user, profile, signOut } = useAuth();
+  const { user } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
 

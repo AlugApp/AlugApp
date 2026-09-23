@@ -5,7 +5,7 @@ import { decrypt } from "../lib/crypto";
 import {
   Star, Edit2, Package, HelpCircle, LogOut,
   ShieldCheck, Bell, Shield, CreditCard,
-  Home as HomeIcon, PlusCircle, MessageSquare, User,
+  User,
   Eye, EyeOff, X, Trash2,
 } from "lucide-react";
 
@@ -17,10 +17,11 @@ interface PerfilProps {
   onLogout: () => void;
   onGoToEditar: () => void;
   onGoToMyAnnouncements: () => void;
+  onGoToAdmin?: () => void;
 }
 
-export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnouncements }: PerfilProps) {
-  const { user, profile, signOut } = useAuth();
+export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnouncements, onGoToAdmin }: PerfilProps) {
+  const { user, profile, signOut, isAdmin } = useAuth();
   const [tab, setTab] = useState<Tab>("informacoes");
 
   // ─── Alterar Senha ────────────────────────────────────────────────────────
@@ -323,7 +324,14 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
               </button>
 
               {/* Name */}
-              <h2 className="text-lg font-bold text-gray-900">{profile?.fullName || "Usuário"}</h2>
+              <div className="flex items-center gap-2 mb-1">
+                <h2 className="text-lg font-bold text-gray-900">{profile?.fullName || "Usuário"}</h2>
+                {isAdmin && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                    <Shield className="w-3 h-3 text-blue-700" /> Admin
+                  </span>
+                )}
+              </div>
               {membroDesde && (
                 <p className="text-sm text-gray-500 mb-4">Membro desde {membroDesde}</p>
               )}
@@ -493,6 +501,20 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
               <h3 className="font-bold text-gray-900">Ações Rápidas</h3>
             </div>
             <div className="divide-y">
+              {isAdmin && (
+                <button
+                  onClick={onGoToAdmin}
+                  className="w-full flex items-center justify-between px-5 py-4 text-sm font-semibold text-blue-800 bg-blue-50/70 hover:bg-blue-100/70 transition"
+                >
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                    <span>Painel de Administração</span>
+                  </div>
+                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-blue-600 text-white font-bold tracking-wide">
+                    ADMIN
+                  </span>
+                </button>
+              )}
               <button className="w-full flex items-center gap-3 px-5 py-4 text-sm text-gray-700 hover:bg-gray-50 transition">
                 <Package className="w-5 h-5 text-gray-500" />
                 Histórico de Aluguéis

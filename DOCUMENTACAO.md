@@ -40,9 +40,10 @@ src/
 │   ├── supabaseClient.ts    # Instância única do cliente Supabase
 │   ├── crypto.ts            # encrypt / decrypt / hashCPF
 │   ├── geocoding.ts         # Geocodificação de endereços (Nominatim)
-│   └── censura.ts           # Lista de palavras censuradas + funções de filtro
+│   ├── censura.ts           # Lista de palavras censuradas + funções de filtro
+│   └── admin.ts             # Funções de moderação, RBAC e gestão administrativa
 └── pages/
-    ├── Login.tsx            # Login e-mail + OAuth Google
+    ├── Login.tsx            # Login e-mail + OAuth Google (redirecionamento padronizado)
     ├── Cadastro.tsx         # Cadastro completo com validações
     ├── CompletarPerfil.tsx  # Complemento de perfil pós-OAuth
     ├── RecuperarSenha.tsx   # Envio de e-mail de reset
@@ -52,10 +53,11 @@ src/
     ├── CadastrarItem.tsx    # Formulário de criação de anúncio
     ├── EditarItem.tsx       # Formulário de edição de anúncio
     ├── MeusAnuncios.tsx     # Listagem dos anúncios do usuário logado
-    ├── Perfil.tsx           # Perfil: dados, segurança, MFA, exclusão
+    ├── Perfil.tsx           # Perfil: dados, segurança, MFA, exclusão e acesso Admin
     ├── EditarPerfil.tsx     # Edição de dados pessoais e endereço
     ├── Dashboard.tsx        # Estatísticas (locador / locatário)
-    └── Chat.tsx             # Chat: solicitações + mensagens em tempo real
+    ├── Chat.tsx             # Chat: solicitações + mensagens em tempo real + canal moderação
+    └── Admin.tsx            # Painel Administrativo (RBAC, moderação, preços e chat direto)
 ```
 
 ---
@@ -214,14 +216,17 @@ Contexto global que expõe:
   user: User | null,
   profile: UserProfile | null,   // linha da tabela users
   loading: boolean,
+  isAdmin: boolean,              // indica se possui privilégio de administrador (RBAC)
   refreshProfile: () => Promise<void>,
   signOut: () => Promise<void>,
 }
 ```
 
-**Fluxo de inicialização:**
-1. `getSession()` → se há sessão ativa, carrega o perfil via `fetchProfile(authId)`
-2. `onAuthStateChange` escuta eventos subsequentes:
+**Fluxo de inicialização e segurança:**
+1. `getSession()` → se há sessão ativa, carrega o perfil via `fetchProfile(authId)`.
+2. **Tratamento de retorno OAuth (Bug 02):** executa `cleanOAuthUrl()` para remover fragmentos de tokens (`#access_token=...`) e parâmetros de troca (`?code=...`) da barra de navegação, mantendo o histórico limpo e evitando desvios para páginas externas.
+3. **Verificação de Banimento (Feat 02):** caso o e-mail, `id` ou `auth_id` do usuário constem como suspensos, a sessão é encerrada de imediato via `signOut()` e o acesso é negado.
+4. `onAuthStateChange` escuta eventos subsequentes:
    - `TOKEN_REFRESHED` → atualiza sessão silenciosamente
    - `SIGNED_OUT` → limpa tudo
    - `SIGNED_IN` real (novo login) → recarrega perfil
@@ -229,7 +234,19 @@ Contexto global que expõe:
 
 **Descriptografia do CPF:** ao buscar o perfil, o campo `cpf` é automaticamente descriptografado com `decrypt()` antes de ser armazenado no contexto.
 
-### 4.3 Criptografia (`crypto.ts`)
+### 4.3 Módulo Administrativo e RBAC (`admin.ts`)
+
+| Função | Descrição |
+|--------|-----------|
+| `isAdmin(user, profile)` | Identifica administradores via metadados do Auth, perfil ou lista de e-mails (`REACT_APP_ADMIN_EMAILS`) |
+| `banUser(target)` | Aplica suspensão na conta do usuário (**estritamente bloqueado para administradores**) |
+| `unbanUser(target)` | Revoga o banimento de um usuário |
+| `forceDeleteItem(iditem)` | Exclusão forçada de qualquer anúncio, com limpeza cascateada de chat, solicitações e fotos |
+| `updateItemPricing(iditem, params)` | Alteração forçada de diária, semanal, mensal e aplicação/remoção de desconto percentual |
+| `promoteToAdmin(target)` | Concede privilégio de administrador a um usuário (com persistência e atualização) |
+| `demoteAdmin(target)` | Revoga privilégio de administrador previamente concedido |
+
+### 4.4 Criptografia (`crypto.ts`)
 
 | Função | Descrição |
 |--------|-----------|
@@ -239,7 +256,7 @@ Contexto global que expõe:
 
 > **Nota:** O CPF é salvo **criptografado** no banco via `encrypt()` na página de cadastro e descriptografado apenas na exibição.
 
-### 4.4 Censura de conteúdo (`censura.ts`)
+### 4.5 Censura de conteúdo (`censura.ts`)
 
 Helper de filtragem de linguagem inapropriada aplicado antes do envio de mensagens no chat.
 
@@ -268,6 +285,7 @@ O projeto **não usa React Router**. A navegação é controlada por um estado `
 | `editar-perfil` | `EditarPerfil` — editar perfil |
 | `dashboard` | `Dashboard` — estatísticas |
 | `chat` | `Chat` — solicitações + chat em tempo real |
+| `admin` | `Admin` — Painel Administrativo com controle restrito de RBAC |
 
 ### Hierarquia de renderização (`App.tsx`)
 
@@ -479,12 +497,35 @@ Ao abrir uma conversa, exibe todos os aluguéis com aquela pessoa (cards de soli
 - Mensagens novas são enviadas para a solicitação ativa mais recente
 - Realtime: canal por `idsolicitacao` para cada aluguel da conversa aberta
 - Censura automática via `censurarTexto()` antes do INSERT
-- Input desabilitado quando não há aluguel ativo
+- **Permissão de envio (Feat 02):** para usuários normais, o input é bloqueado se não houver aluguel ativo; para **administradores (`isAdmin`)**, o envio é **sempre liberado**, permitindo contato direto de suporte/moderação com qualquer usuário registrado.
 
 **Modal de upload de foto:**
 - Centralizado na tela (`fixed inset-0 flex items-center justify-center`)
 - `type="file" accept="image/*" capture="environment"` — abre câmera no mobile
 - Preview antes de confirmar; upload para Storage `items/rental/`
+
+### 6.16 `Admin.tsx` — Painel de Administração e Gestão de Admins (Feat 02)
+
+Tela de acesso restrito a administradores, protegida tanto pelo roteador `App.tsx` quanto internamente:
+
+1. **Controle de Acesso e Papéis (RBAC):**
+   - Identificação baseada no módulo `admin.ts` (checando metadados do Supabase Auth, perfil e lista autorizada).
+   - Tentativas de acesso por usuários comuns resultam em redirecionamento imediato para `home`.
+2. **Moderação de Anúncios:**
+   - Lista completa com busca e status de todos os itens cadastrados no sistema (inclusive de outros administradores).
+   - **Exclusão Forçada:** remove o item permanentemente executando a limpeza cascateada de mensagens $\rightarrow$ solicitações $\rightarrow$ fotos $\rightarrow$ registro do item, evitando violações de chave estrangeira.
+3. **Moderação de Usuários (Banimento com Proteção):**
+   - Listagem de usuários com contador de anúncios ativos e status de banimento.
+   - **Regra Estrita de Segurança:** botões de banimento são permanentemente desabilitados para contas de administradores, impossibilitando que um administrador seja banido.
+   - Usuários banidos têm sua sessão imediatamente revogada em tempo de execução ao tentar interagir ou autenticar.
+4. **Gestão de Preços e Descontos:**
+   - Permite alteração forçada dos valores diário, semanal e mensal de qualquer item.
+   - Aplicação e remoção de desconto percentual (`desconto_percentual`), recalculando o valor promocional em tempo real.
+5. **Comunicação Direta:**
+   - Botão "Conversar" junto a cada usuário listado no painel, permitindo abrir uma conversa instantânea na tela de Chat sem necessidade de requisição prévia de aluguel.
+6. **Promoção de Administradores com Autenticação de Segurança:**
+   - Botão **"Tornar Admin"** visível exclusivamente para contas que ainda não possuem privilégios.
+   - **Exigência de Reautenticação:** abre modal de segurança que exige a senha atual do administrador (para logins e-mail/senha) validada diretamente no Supabase Auth, ou a palavra-chave de autorização `PROMOVER` (para contas OAuth Google). Apenas com a autenticação confirmada o novo administrador é ativado.
 
 ---
 
