@@ -192,6 +192,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
     const files = Array.from(e.target.files || []);
     const novas = files.map((file) => ({ file, preview: URL.createObjectURL(file) }));
     setFotos((prev) => [...prev, ...novas]);
+    if (novas.length > 0) setMsg(null);
     e.target.value = "";
   };
 

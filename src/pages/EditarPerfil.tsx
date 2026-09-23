@@ -243,9 +243,9 @@ return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
-        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
-        <span className="text-2xl font-bold text-blue-600 -ml-2">AlugApp</span>
+      <header className="bg-white px-4 py-3 md:px-0 md:py-0 flex items-center shadow-sm flex-shrink-0">
+        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-10 h-10 md:w-20 md:h-20" />
+        <span className="text-lg md:text-2xl font-bold text-blue-600 ml-1 md:-ml-2">AlugApp</span>
       </header>
 
       <div className="flex-1 overflow-y-auto pb-24 px-4 py-6">
@@ -323,7 +323,7 @@ return (
             <form id="editar-form" onSubmit={handleSave} className="space-y-4">
 
               {/* Nome Completo | CPF */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 block">
                     Nome Completo <span className="text-red-500">*</span>
@@ -353,7 +353,7 @@ return (
               </div>
 
               {/* E-mail | Data de Nascimento */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 flex items-center justify-between">
                     <span>E-mail</span>
@@ -387,7 +387,7 @@ return (
               </div>
 
               {/* Telefone | Gênero */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-gray-700 mb-1 block">
                     Telefone <span className="text-red-500">*</span>
@@ -433,7 +433,7 @@ return (
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Endereço</p>
 
                 {/* CEP | Rua */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
                       CEP <span className="text-red-500">*</span>
@@ -453,7 +453,7 @@ return (
                       )}
                     </div>
                   </div>
-                  <div className="col-span-2">
+                  <div className="sm:col-span-2">
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
                       Rua / Logradouro <span className="text-red-500">*</span>
                     </label>
@@ -470,7 +470,7 @@ return (
                 </div>
 
                 {/* Número | Complemento | Bairro */}
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
                       Número <span className="text-red-500">*</span>
@@ -496,7 +496,7 @@ return (
                       className={inputClass}
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2 sm:col-span-1">
                     <label className="text-xs font-semibold text-gray-700 mb-1 block">
                       Bairro <span className="text-red-500">*</span>
                     </label>

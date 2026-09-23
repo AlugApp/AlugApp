@@ -37,7 +37,7 @@ const RedefinirSenha: React.FC<RedefinirSenhaProps> = ({ onSuccess, onGoBack }) 
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-md">
+      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-10 w-full max-w-md">
         <button
           onClick={onGoBack}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-700 mb-6 transition"

@@ -434,18 +434,20 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="flex w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden">
+    <div className="min-h-screen bg-white md:flex md:items-center md:justify-center md:bg-gray-100 md:p-4">
+      <div className="md:flex w-full md:max-w-5xl md:bg-white md:rounded-3xl md:shadow-xl md:overflow-hidden">
 
-        {/* LADO ESQUERDO — Azul */}
-        <div className="w-64 flex-shrink-0 bg-blue-700 flex flex-col p-8 relative">
+        {/* TOPO MOBILE / LADO ESQUERDO DESKTOP — Azul */}
+        <div className="bg-blue-700 px-6 py-5 flex items-center justify-between gap-4 md:w-64 md:flex-shrink-0 md:flex-col md:items-stretch md:justify-start md:p-8 md:relative">
           <img
             src="/AlugApp-Branco.png"
             alt="AlugApp"
-            className="w-20 h-20 absolute top-3 left-3"
+            className="w-10 h-10 md:w-20 md:h-20 md:absolute md:top-3 md:left-3"
           />
 
-          <div className="flex flex-col justify-center flex-1 mt-16 gap-5">
+          <p className="text-blue-200 text-sm md:hidden">Já tem conta?</p>
+
+          <div className="hidden md:flex md:flex-col md:justify-center md:flex-1 md:mt-16 gap-5">
             <div>
               <h2 className="text-2xl font-extrabold text-white leading-tight mb-3">
                 Bem-vindo<br />de volta!
@@ -454,20 +456,20 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                 Acesse sua conta agora mesmo.
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={onGoToLogin}
-              className="border-2 border-white text-white font-bold py-3 px-6 rounded-full text-sm tracking-widest hover:bg-white hover:text-blue-700 transition w-full"
-            >
-              ENTRAR
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={onGoToLogin}
+            className="border-2 border-white text-white font-bold py-2 px-5 rounded-full text-xs tracking-widest hover:bg-white hover:text-blue-700 active:bg-blue-50 transition md:py-3 md:px-6 md:text-sm md:w-full"
+          >
+            ENTRAR
+          </button>
         </div>
 
-        {/* LADO DIREITO — Formulário */}
-        <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-1">Criar Conta</h2>
+        {/* FORMULÁRIO */}
+        <div className="flex-1 px-6 py-6 md:p-8 md:overflow-y-auto">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-1">Criar Conta</h2>
           <p className="text-xs text-gray-400 text-center mb-4">Campos com <span className="text-red-500 font-semibold">*</span> são obrigatórios</p>
 
           {/* Google */}
@@ -519,7 +521,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
             />
 
             {/* E-mail | CPF */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="email"
                 name="email"
@@ -541,7 +543,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
             </div>
 
             {/* Data | Telefone | Gênero */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="relative">
                 <input
                   type="text"
@@ -609,7 +611,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Endereço</p>
 
               {/* CEP | Rua */}
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div className="relative">
                   <input
                     type="text"
@@ -630,13 +632,13 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.rua}
                   onChange={handleChange}
                   placeholder="Rua / Logradouro*"
-                  className={`${ic('rua')} col-span-2`}
+                  className={`${ic('rua')} sm:col-span-2`}
                   disabled={loading}
                 />
               </div>
 
               {/* Número | Complemento | Bairro */}
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
                 <input
                   type="text"
                   name="numero"
@@ -661,7 +663,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
                   value={formData.bairro}
                   onChange={handleChange}
                   placeholder="Bairro*"
-                  className={ic('bairro')}
+                  className={`${ic('bairro')} col-span-2 sm:col-span-1`}
                   disabled={loading}
                 />
               </div>

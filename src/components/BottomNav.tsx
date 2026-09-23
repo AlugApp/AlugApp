@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Home as HomeIcon, PlusCircle, BarChart2, MessageSquare, User, LogOut } from 'lucide-react';
+import { Home as HomeIcon, PlusCircle, BarChart2, MessageSquare, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 
@@ -13,7 +13,7 @@ interface BottomNavProps {
 }
 
 export default function BottomNav({ mode, navigate }: BottomNavProps) {
-  const { signOut, profile } = useAuth();
+  const { profile } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -69,13 +69,6 @@ export default function BottomNav({ mode, navigate }: BottomNavProps) {
           </button>
         );
       })}
-      <button
-        onClick={() => signOut()}
-        className="flex flex-col items-center gap-0.5 text-red-400 hover:text-red-600 transition"
-      >
-        <LogOut className="w-6 h-6" />
-        <span className="text-xs">Sair</span>
-      </button>
     </nav>
   );
 }

@@ -335,7 +335,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
                 </div>
 
                 {/* Status cards */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: "Pendentes",  count: pendentes,  icon: <AlertCircle className="w-4 h-4" />, cls: "bg-yellow-50 border-yellow-200 text-yellow-700" },
                     { label: "Aprovados",  count: aprovadas,  icon: <CheckCircle className="w-4 h-4" />, cls: "bg-green-50 border-green-200 text-green-700" },

@@ -13,8 +13,14 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setMessage(null);
+
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: 'Informe seu e-mail.' });
+      return;
+    }
+
+    setLoading(true);
 
     const { data, error: queryError } = await supabase
       .from('users')
@@ -45,7 +51,7 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="bg-white rounded-3xl shadow-xl p-10 w-full max-w-md">
+      <div className="bg-white rounded-3xl shadow-xl p-6 sm:p-10 w-full max-w-md">
 
         <button
           onClick={onGoBack}

@@ -68,6 +68,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   const [notifItems, setNotifItems]               = useState<{ id: number; nome: string; item: string }[]>([]);
   const [notifLoading, setNotifLoading]           = useState(false);
   const notifRef                                  = useRef<HTMLDivElement>(null);
+  const scrollRestoredRef                         = useRef(false);
 
   const { latitude: userLat, longitude: userLon, loading: locLoading, error: locError, requestLocation, clearLocation } = useGeolocation();
 
@@ -79,7 +80,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
   const [dataInicio, setDataInicio] = useState(() => sessionStorage.getItem("h_dataInicio") || "");
   const [dataFim, setDataFim] = useState(() => sessionStorage.getItem("h_dataFim") || "");
   const [ordenacao, setOrdenacao] = useState<Ordenacao>(() => (sessionStorage.getItem("h_ordenacao") as Ordenacao) || "recente");
-  const [showFiltros, setShowFiltros] = useState(() => sessionStorage.getItem("h_showFiltros") === "true");
+  const [showFiltros, setShowFiltros] = useState(false);
   const [proximoRaio, setProximoRaio] = useState<number | null>(() => {
     const saved = sessionStorage.getItem("h_proximoRaio");
     return saved ? Number(saved) : null;
@@ -136,16 +137,10 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
 
   const displayedItems = useMemo(() => {
     if (!proximityActive) return items;
-    console.log(`[proximidade] busca em (${userLat}, ${userLon}), raio ${proximoRaio}km, ${items.length} itens carregados`);
     return items.filter(item => {
-      if (item.latitude == null || item.longitude == null) {
-        console.log(`[proximidade] "${item.nome}" SEM coordenadas → oculto`);
-        return false;
-      }
+      if (item.latitude == null || item.longitude == null) return false;
       const dist = haversineKm(userLat!, userLon!, item.latitude, item.longitude);
-      const dentro = dist <= proximoRaio!;
-      console.log(`[proximidade] "${item.nome}" → ${dist.toFixed(2)}km ${dentro ? "✓ dentro" : "✗ fora"}`);
-      return dentro;
+      return dist <= proximoRaio!;
     });
   }, [items, proximoRaio, userLat, userLon, proximityActive]);
 
@@ -204,6 +199,22 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     });
   }, []);
 
+  // Restaura a posição de rolagem apenas ao voltar da tela de detalhes de um item.
+  // Qualquer outra navegação (trocar de aba e voltar) deve começar do topo.
+  useEffect(() => {
+    if (loading || scrollRestoredRef.current) return;
+    scrollRestoredRef.current = true;
+    const pending = sessionStorage.getItem("h_scrollY_pending");
+    const saved = sessionStorage.getItem("h_scrollY");
+    sessionStorage.removeItem("h_scrollY_pending");
+    sessionStorage.removeItem("h_scrollY");
+    if (pending === "1" && saved) {
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, Number(saved))));
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, [loading]);
+
   useEffect(() => {
     sessionStorage.setItem("h_cat", categoryFilter);
     sessionStorage.setItem("h_search", searchText);
@@ -216,10 +227,6 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     loadItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryFilter, searchText, periodo, precoMin, precoMax, dataInicio, dataFim, ordenacao]);
-
-  useEffect(() => {
-    sessionStorage.setItem("h_showFiltros", String(showFiltros));
-  }, [showFiltros]);
 
   useEffect(() => {
     if (proximoRaio !== null) {
@@ -256,16 +263,16 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     <div className="min-h-screen bg-gray-100 pb-20">
 
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex justify-between items-center shadow-sm pr-4">
+      <header className="bg-white px-4 py-3 md:px-0 md:py-0 flex justify-between items-center shadow-sm md:pr-4">
         <div className="flex items-center">
-          <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
-          <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
+          <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-10 h-10 md:w-20 md:h-20" />
+          <span className="text-lg md:text-2xl font-bold text-blue-600 ml-1 md:-ml-0">AlugApp</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4">
           {/* SINO DE NOTIFICAÇÕES */}
           <div className="relative" ref={notifRef}>
             <button
-              className="relative text-gray-400 hover:text-blue-600 transition"
+              className="relative text-gray-400 hover:text-blue-600 transition p-1 -m-1"
               onClick={handleBellClick}
             >
               <Bell className="w-6 h-6" />
@@ -277,7 +284,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
             </button>
 
             {showNotifPopup && (
-              <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+              <div className="fixed top-16 right-4 left-4 md:absolute md:top-full md:right-0 md:left-auto md:mt-2 md:w-72 w-auto bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden">
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-1">
                   Pedidos pendentes
                 </p>
@@ -311,10 +318,11 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
           </div>
           <button
             onClick={onGoToAnnounce}
-            className="flex items-center gap-2 bg-blue-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 transition"
+            aria-label="Anunciar Item"
+            className="flex items-center gap-2 bg-blue-700 text-white p-2.5 sm:px-5 sm:py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 active:bg-blue-900 transition"
           >
             <CirclePlus className="w-5 h-5" />
-            Anunciar Item
+            <span className="hidden sm:inline">Anunciar Item</span>
           </button>
         </div>
       </header>
@@ -647,13 +655,14 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
                 : null;
               return (
                 <div key={item.iditem} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition">
-                  <div className="aspect-square w-full overflow-hidden bg-gray-100 relative">
-                    <img
-                      src={item.foto_url || ""}
-                      className={`w-full h-full object-cover transition-transform duration-300 hover:scale-105 ${!item.foto_url ? "hidden" : ""}`}
-                      alt={item.nome}
-                    />
-                    {!item.foto_url && (
+                  <div className="aspect-[16/10] sm:aspect-square w-full overflow-hidden bg-gray-100 relative">
+                    {item.foto_url ? (
+                      <img
+                        src={item.foto_url}
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                        alt={item.nome}
+                      />
+                    ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <Package className="w-12 h-12 text-gray-300" />
                       </div>
@@ -681,7 +690,11 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
                     )}
 
                     <button
-                      onClick={() => onOpenItem(item.iditem)}
+                      onClick={() => {
+                        sessionStorage.setItem("h_scrollY", String(window.scrollY));
+                        sessionStorage.setItem("h_scrollY_pending", "1");
+                        onOpenItem(item.iditem);
+                      }}
                       className="mt-3 w-full bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-800 transition"
                     >
                       Ver Detalhes

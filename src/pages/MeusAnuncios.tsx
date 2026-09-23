@@ -27,6 +27,7 @@ interface Item {
   foto_url?: string | null;
   nome_categoria?: string;
   created_at?: string;
+  disponivel?: boolean;
 }
 
 export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, onOpenItem, onEditItem }: MeusAnunciosProps) {
@@ -75,9 +76,39 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
   }, [user?.id]);
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm("Tem certeza que deseja excluir este anúncio?")) return;
-
     if (!user) return;
+
+    // Verifica se o item já possui histórico de solicitações de aluguel.
+    // Se tiver, a exclusão física quebraria a integridade referencial —
+    // nesse caso, desativamos o anúncio em vez de apagá-lo.
+    const { count: solicitacoesCount } = await supabase
+      .from("solicitacao_aluguel")
+      .select("idsolicitacao", { count: "exact", head: true })
+      .eq("iditem", id);
+
+    if (solicitacoesCount && solicitacoesCount > 0) {
+      if (!window.confirm(
+        "Este anúncio já tem solicitações de aluguel registradas e não pode ser excluído. " +
+        "Deseja desativá-lo para que ele pare de aparecer para outros usuários?"
+      )) return;
+
+      const { error } = await supabase
+        .from("item")
+        .update({ disponivel: false })
+        .eq("iditem", id)
+        .eq("idlocador", user.id);
+
+      if (error) {
+        console.error("Erro ao desativar:", error);
+        alert("Erro ao desativar item: " + error.message);
+      } else {
+        setItems(items.map((item) => item.iditem === id ? { ...item, disponivel: false } : item));
+        alert("Item desativado com sucesso!");
+      }
+      return;
+    }
+
+    if (!window.confirm("Tem certeza que deseja excluir este anúncio?")) return;
 
     // 1️⃣ Apagar as referências de fotos primeiro (para evitar erro de chave estrangeira)
     const { error: photoError } = await supabase
@@ -113,22 +144,23 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
   return (
     <div className="min-h-screen bg-gray-100 pb-20">
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex justify-between items-center shadow-sm">
+      <header className="bg-white px-4 py-3 md:px-0 md:py-0 flex justify-between items-center shadow-sm">
         <div className="flex items-center">
-          <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
-          <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
+          <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-10 h-10 md:w-20 md:h-20" />
+          <span className="text-lg md:text-2xl font-bold text-blue-600 ml-1 md:-ml-0">AlugApp</span>
         </div>
         <button
           onClick={onGoToAnnounce}
-          className="mr-4 flex items-center gap-2 bg-blue-700 text-white px-5 py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 transition"
+          aria-label="Anunciar Item"
+          className="md:mr-4 flex items-center gap-2 bg-blue-700 text-white p-2.5 sm:px-5 sm:py-2.5 rounded-full font-semibold text-sm hover:bg-blue-800 active:bg-blue-900 transition"
         >
           <PlusCircle className="w-5 h-5" />
-          Anunciar Item
+          <span className="hidden sm:inline">Anunciar Item</span>
         </button>
       </header>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Meus Anúncios</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-6">Meus Anúncios</h2>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -151,19 +183,24 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {items.map((item) => (
-              <div key={item.iditem} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition flex flex-col">
-                <div className="aspect-square w-full overflow-hidden bg-gray-100 relative">
-                  <img
-                    src={item.foto_url || ""}
-                    className={`w-full h-full object-cover transition-transform duration-300 hover:scale-105 ${!item.foto_url ? "hidden" : ""}`}
-                    alt={item.nome}
-                  />
-                  {!item.foto_url && (
+              <div key={item.iditem} className={`bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition flex flex-col ${item.disponivel === false ? "opacity-60" : ""}`}>
+                <div className="aspect-[16/10] sm:aspect-square w-full overflow-hidden bg-gray-100 relative">
+                  {item.foto_url ? (
+                    <img
+                      src={item.foto_url}
+                      className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                      alt={item.nome}
+                    />
+                  ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Package className="w-12 h-12 text-gray-300" />
                     </div>
                   )}
-                  {item.nome_categoria && (
+                  {item.disponivel === false ? (
+                    <span className="absolute top-2 left-2 bg-gray-800/90 text-white text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
+                      Desativado
+                    </span>
+                  ) : item.nome_categoria && (
                     <span className="absolute top-2 left-2 bg-white/90 text-blue-600 text-xs font-semibold px-2 py-0.5 rounded-full shadow-sm">
                       {item.nome_categoria}
                     </span>

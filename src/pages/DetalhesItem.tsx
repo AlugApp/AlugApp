@@ -241,8 +241,8 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
     return (
       <div className="min-h-screen bg-gray-50 animate-pulse flex flex-col">
         <div className="h-16 bg-white border-b flex-shrink-0" />
-        <div className="flex flex-1">
-          <div className="w-5/12 bg-gray-300" />
+        <div className="flex flex-col md:flex-row flex-1">
+          <div className="w-full aspect-square md:aspect-auto md:w-5/12 bg-gray-300" />
           <div className="flex-1 p-8 space-y-4">
             <div className="h-7 bg-gray-200 rounded w-2/3" />
             <div className="h-4 bg-gray-200 rounded w-1/3" />
@@ -275,18 +275,18 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
   ] as const;
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden pb-32">
+    <div className="min-h-screen md:h-screen bg-gray-50 flex flex-col md:overflow-hidden pb-32">
 
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
-        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-16 h-16" />
-        <span className="text-xl font-bold text-blue-600 -ml-0">AlugApp</span>
+      <header className="bg-white px-4 py-3 md:px-0 md:py-0 flex items-center shadow-sm flex-shrink-0">
+        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-10 h-10 md:w-16 md:h-16" />
+        <span className="text-lg md:text-xl font-bold text-blue-600 ml-1 md:-ml-0">AlugApp</span>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 md:overflow-hidden">
 
         {/* IMAGEM */}
-        <div className="relative w-5/12 flex-shrink-0 bg-white">
+        <div className="relative w-full aspect-square md:aspect-auto md:w-5/12 md:h-full md:flex-shrink-0 bg-white">
           <button
             onClick={onGoBack}
             className="absolute top-4 left-4 z-10 w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center"
@@ -328,10 +328,10 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
         </div>
 
         {/* PAINEL DIREITO */}
-        <div className="flex-1 bg-white flex flex-col overflow-hidden">
+        <div className="flex-1 bg-white flex flex-col md:overflow-hidden">
 
           {/* ABAS */}
-          <div className="flex border-b border-gray-100 flex-shrink-0">
+          <div className="flex border-b border-gray-100 flex-shrink-0 sticky top-0 bg-white z-10">
             {TABS.map(({ key, label }) => (
               <button
                 key={key}
@@ -348,11 +348,11 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
           </div>
 
           {/* CONTEÚDO DA ABA */}
-          <div className="flex-1 overflow-hidden px-6 py-4">
+          <div className="flex-1 md:overflow-hidden px-4 md:px-6 py-4">
 
             {/* ABA: VISÃO GERAL */}
             {tab === "info" && (
-              <div className="h-full flex flex-col gap-3">
+              <div className="md:h-full flex flex-col gap-3">
                 {/* Badges: categoria + estado */}
                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                   {item.categoria?.nome_categoria && (
@@ -445,9 +445,15 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
                       <p className="text-xs text-gray-500">Proprietário</p>
                     </div>
                   </div>
-                  <button className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-                    <MessageSquare className="w-4 h-4 text-white" />
-                  </button>
+                  {user?.id !== item.idlocador && (
+                    <button
+                      onClick={() => { setShowAluguel(true); setSendMsg(null); }}
+                      title="Solicitar aluguel para conversar com o proprietário"
+                      className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center hover:bg-blue-700 transition"
+                    >
+                      <MessageSquare className="w-4 h-4 text-white" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Descrição */}
@@ -485,7 +491,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
 
             {/* ABA: INDISPONIBILIDADE */}
             {tab === "indisponibilidade" && (
-              <div className="h-full flex flex-col gap-3">
+              <div className="md:h-full flex flex-col gap-3">
                 <p className="text-xs text-gray-400 flex-shrink-0">
                   Dias marcados em vermelho não estão disponíveis para aluguel.
                 </p>
@@ -495,7 +501,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
 
             {/* ABA: REGRAS */}
             {tab === "regras" && (
-              <div className="h-full overflow-y-auto">
+              <div className="md:h-full md:overflow-y-auto">
                 <ul className="space-y-4">
                   {REGRAS.map((r) => (
                     <li key={r.titulo} className="flex gap-3">
@@ -540,75 +546,84 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
       {showAluguel && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full space-y-4">
-            <h2 className="text-xl font-bold text-gray-900">Solicitar Aluguel</h2>
-
-            {sendMsg && (
-              <div className={`p-3 rounded-xl text-sm text-center font-medium ${
-                sendMsg.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
-              }`}>
-                {sendMsg.text}
+            {sendMsg?.type === "success" ? (
+              <div className="py-6 flex flex-col items-center text-center gap-3">
+                <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <p className="text-gray-900 font-semibold">{sendMsg.text}</p>
               </div>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-gray-900">Solicitar Aluguel</h2>
+
+                {sendMsg && (
+                  <div className="p-3 rounded-xl text-sm text-center font-medium bg-red-50 text-red-600">
+                    {sendMsg.text}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm text-gray-600 mb-1 block">Data de início</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={aluguel.inicio}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => { setAluguel({ ...aluguel, inicio: e.target.value }); setSendMsg(null); }}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-gray-600 mb-1 block">Data de devolução</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={aluguel.fim}
+                    min={aluguel.inicio || new Date().toISOString().split("T")[0]}
+                    onChange={(e) => { setAluguel({ ...aluguel, fim: e.target.value }); setSendMsg(null); }}
+                  />
+                </div>
+
+                {aluguel.inicio && aluguel.fim && rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
+                  <p className="text-xs text-red-500 font-medium">O período selecionado contém datas indisponíveis. Confira o calendário.</p>
+                )}
+
+                {calc && !rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
+                  <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-700">
+                    <span className="font-semibold">{calc.dias} dia{calc.dias > 1 ? "s" : ""}</span> —{" "}
+                    Total: <span className="font-bold text-green-600">R$ {calc.total.toFixed(2)}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm text-gray-600 mb-1 block">Observações</label>
+                  <textarea
+                    placeholder="Alguma observação..."
+                    className="w-full border rounded-lg p-2 min-h-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={aluguel.observacoes}
+                    onChange={(e) => setAluguel({ ...aluguel, observacoes: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    className="flex-1 border rounded-xl py-2 text-gray-700 font-medium"
+                    onClick={() => { setShowAluguel(false); setSendMsg(null); }}
+                    disabled={sending}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="flex-1 bg-blue-600 text-white rounded-xl py-2 font-semibold hover:bg-blue-700 transition disabled:opacity-60"
+                    onClick={handleSolicitar}
+                    disabled={sending}
+                  >
+                    {sending ? "Enviando..." : "Enviar Solicitação"}
+                  </button>
+                </div>
+              </>
             )}
-
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Data de início</label>
-              <input
-                type="date"
-                className="w-full border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={aluguel.inicio}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setAluguel({ ...aluguel, inicio: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Data de devolução</label>
-              <input
-                type="date"
-                className="w-full border rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={aluguel.fim}
-                min={aluguel.inicio || new Date().toISOString().split("T")[0]}
-                onChange={(e) => setAluguel({ ...aluguel, fim: e.target.value })}
-              />
-            </div>
-
-            {aluguel.inicio && aluguel.fim && rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
-              <p className="text-xs text-red-500 font-medium">O período selecionado contém datas indisponíveis. Confira o calendário.</p>
-            )}
-
-            {calc && !rangeContemIndisponivel(aluguel.inicio, aluguel.fim) && (
-              <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-700">
-                <span className="font-semibold">{calc.dias} dia{calc.dias > 1 ? "s" : ""}</span> —{" "}
-                Total: <span className="font-bold text-green-600">R$ {calc.total.toFixed(2)}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="text-sm text-gray-600 mb-1 block">Observações</label>
-              <textarea
-                placeholder="Alguma observação..."
-                className="w-full border rounded-lg p-2 min-h-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={aluguel.observacoes}
-                onChange={(e) => setAluguel({ ...aluguel, observacoes: e.target.value })}
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                className="flex-1 border rounded-xl py-2 text-gray-700 font-medium"
-                onClick={() => { setShowAluguel(false); setSendMsg(null); }}
-                disabled={sending}
-              >
-                Cancelar
-              </button>
-              <button
-                className="flex-1 bg-blue-600 text-white rounded-xl py-2 font-semibold hover:bg-blue-700 transition disabled:opacity-60"
-                onClick={handleSolicitar}
-                disabled={sending}
-              >
-                {sending ? "Enviando..." : "Enviar Solicitação"}
-              </button>
-            </div>
           </div>
         </div>
       )}

@@ -279,9 +279,9 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
     <div className="min-h-screen bg-gray-100 flex flex-col">
 
       {/* HEADER */}
-      <header className="bg-white px-0 py-0 flex items-center shadow-sm flex-shrink-0">
-        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-20 h-20" />
-        <span className="text-2xl font-bold text-blue-600 -ml-0">AlugApp</span>
+      <header className="bg-white px-4 py-3 md:px-0 md:py-0 flex items-center shadow-sm flex-shrink-0">
+        <img src="/AlugApp-Azul.png" alt="AlugApp" className="w-10 h-10 md:w-20 md:h-20" />
+        <span className="text-lg md:text-2xl font-bold text-blue-600 ml-1 md:-ml-0">AlugApp</span>
       </header>
 
       {/* SCROLLABLE CONTENT */}
@@ -427,7 +427,10 @@ export default function Perfil({ onGoBack, onLogout, onGoToEditar, onGoToMyAnnou
               {tab === "pagamentos" && (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500 text-center py-4">Nenhum cartão cadastrado.</p>
-                  <button className="w-full bg-blue-600 text-white rounded-xl py-3 flex items-center justify-center gap-2 font-semibold hover:bg-blue-700 transition text-sm">
+                  <button
+                    onClick={() => alert("Cadastro de cartão em breve.")}
+                    className="w-full bg-blue-600 text-white rounded-xl py-3 flex items-center justify-center gap-2 font-semibold hover:bg-blue-700 transition text-sm"
+                  >
                     <CreditCard className="w-5 h-5" />
                     Adicionar Cartão
                   </button>

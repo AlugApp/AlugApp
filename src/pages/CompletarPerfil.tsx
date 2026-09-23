@@ -183,14 +183,43 @@ export default function CompletarPerfil() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 p-4">
-      <div className="flex w-full max-w-5xl bg-white rounded-3xl shadow-xl overflow-hidden">
+    <div className="min-h-screen bg-white md:flex md:items-center md:justify-center md:bg-gray-100 md:p-4">
+      <div className="md:flex w-full md:max-w-5xl md:bg-white md:rounded-3xl md:shadow-xl md:overflow-hidden">
 
-        {/* PAINEL ESQUERDO */}
-        <div className="w-64 flex-shrink-0 bg-blue-700 flex flex-col p-8 relative">
-          <img src="/AlugApp-Branco.png" alt="AlugApp" className="w-20 h-20 absolute top-3 left-3" />
+        {/* TOPO MOBILE / PAINEL ESQUERDO DESKTOP */}
+        <div className="bg-blue-700 px-6 py-5 flex items-center gap-3 md:w-64 md:flex-shrink-0 md:flex-col md:items-stretch md:p-8 md:relative">
+          <img src="/AlugApp-Branco.png" alt="AlugApp" className="w-10 h-10 md:w-20 md:h-20 md:absolute md:top-3 md:left-3" />
 
-          <div className="flex flex-col justify-center flex-1 mt-16 gap-5">
+          {googleAvatar ? (
+            <img
+              src={googleAvatar}
+              alt={googleName}
+              className="w-10 h-10 md:w-16 md:h-16 rounded-full border-2 md:border-4 border-white shadow-md md:hidden"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center text-white text-sm font-bold md:hidden">
+              {googleName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="flex-1 min-w-0 md:hidden">
+            <p className="text-white font-semibold text-sm leading-tight truncate">{googleName}</p>
+            <p className="text-blue-200 text-xs truncate">{googleEmail}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              await supabase.rpc('cleanup_orphaned_auth_user', { p_email: googleEmail });
+              await supabase.auth.signOut();
+            }}
+            className="flex items-center gap-1.5 text-blue-200 hover:text-white text-xs transition flex-shrink-0"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Cancelar cadastro</span>
+          </button>
+
+          <div className="hidden md:flex md:flex-col md:justify-center md:flex-1 md:mt-16 gap-5">
             <div className="flex flex-col items-center gap-3">
               {googleAvatar ? (
                 <img
@@ -218,24 +247,12 @@ export default function CompletarPerfil() {
                 Complete seu perfil para começar a usar o AlugApp.
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={async () => {
-                await supabase.rpc('cleanup_orphaned_auth_user', { p_email: googleEmail });
-                await supabase.auth.signOut();
-              }}
-              className="flex items-center gap-2 text-blue-200 hover:text-white text-xs transition mt-2"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              Cancelar cadastro
-            </button>
           </div>
         </div>
 
         {/* FORMULÁRIO */}
-        <div className="flex-1 p-8 overflow-y-auto">
-          <h2 className="text-3xl font-bold text-gray-900 text-center mb-1">Complete seu perfil</h2>
+        <div className="flex-1 px-6 py-6 md:p-8 md:overflow-y-auto">
+          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 text-center mb-1">Complete seu perfil</h2>
           <p className="text-xs text-gray-400 text-center mb-4">Campos com <span className="text-red-500 font-semibold">*</span> são obrigatórios</p>
 
           {error && (
@@ -253,7 +270,7 @@ export default function CompletarPerfil() {
             />
 
             {/* CPF | Telefone */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="text" name="cpf" value={formData.cpf} onChange={handleChange}
                 placeholder="CPF*" className={inputClass} required disabled={loading}
@@ -265,7 +282,7 @@ export default function CompletarPerfil() {
             </div>
 
             {/* Data de nascimento | Gênero */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input
                 type="text" name="birthDate" value={formData.birthDate} onChange={handleChange}
                 placeholder="dd/mm/aaaa*" className={inputClass} required disabled={loading}
@@ -292,7 +309,7 @@ export default function CompletarPerfil() {
             <div className="border-t border-gray-200 pt-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Endereço</p>
 
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div className="relative">
                   <input
                     type="text" name="cep" value={formData.cep} onChange={handleChange}
@@ -302,11 +319,11 @@ export default function CompletarPerfil() {
                 </div>
                 <input
                   type="text" name="rua" value={formData.rua} onChange={handleChange}
-                  placeholder="Rua / Logradouro*" className={`${inputClass} col-span-2`} required disabled={loading}
+                  placeholder="Rua / Logradouro*" className={`${inputClass} sm:col-span-2`} required disabled={loading}
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
                 <input
                   type="text" name="numero" value={formData.numero} onChange={handleChange}
                   placeholder="Número*" className={inputClass} required disabled={loading}
@@ -317,7 +334,7 @@ export default function CompletarPerfil() {
                 />
                 <input
                   type="text" name="bairro" value={formData.bairro} onChange={handleChange}
-                  placeholder="Bairro*" className={inputClass} required disabled={loading}
+                  placeholder="Bairro*" className={`${inputClass} col-span-2 sm:col-span-1`} required disabled={loading}
                 />
               </div>
 
