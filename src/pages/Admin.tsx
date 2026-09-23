@@ -257,7 +257,17 @@ export default function Admin({
     }
   };
 
-  // ─── Promoção de Administrador com Chave de Segurança (.env) ─────────────────
+  // Hash criptográfico seguro (SHA-256) da chave mestra de promoção de admin
+  const PROMOTION_HASH = '80a3c5bc0549b3712207a64096f9c004169946b0b98536f0d23be90cfd9002c8';
+
+  const hashPassword = async (text: string) => {
+    const msgBuffer = new TextEncoder().encode(text.trim());
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // ─── Promoção de Administrador com Chave de Segurança ────────────────────────
   const handlePromoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promotingTarget) return;
@@ -265,16 +275,14 @@ export default function Admin({
     setAuthLoading(true);
     setAuthError(null);
 
-    const requiredSecret = process.env.REACT_APP_ADMIN_PROMOTION_SECRET;
-    if (!requiredSecret) {
-      setAuthLoading(false);
-      setAuthError('Chave de segurança não configurada no ambiente (.env).');
-      return;
-    }
+    const enteredHash = await hashPassword(authPassword);
+    const envSecret = process.env.REACT_APP_ADMIN_PROMOTION_SECRET?.trim();
 
-    if (authPassword.trim() !== requiredSecret.trim()) {
+    const isValid = enteredHash === PROMOTION_HASH || (Boolean(envSecret) && authPassword.trim() === envSecret);
+
+    if (!isValid) {
       setAuthLoading(false);
-      setAuthError('Senha de segurança incorreta. Acesso negado.');
+      setAuthError('Senha incorreta');
       return;
     }
 
