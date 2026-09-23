@@ -46,7 +46,13 @@ export function isRevokedAdmin(email?: string | null): boolean {
 export function getPromotedAdmins(): string[] {
   try {
     const raw = localStorage.getItem(PROMOTED_ADMINS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    const revoked = getRevokedAdmins();
+    const filtered = list.filter((e) => !revoked.includes(e.toLowerCase()));
+    if (filtered.length !== list.length) {
+      localStorage.setItem(PROMOTED_ADMINS_KEY, JSON.stringify(filtered));
+    }
+    return filtered;
   } catch {
     return [];
   }
