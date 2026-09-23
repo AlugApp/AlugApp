@@ -78,39 +78,52 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
   const handleDelete = async (id: number) => {
     if (!user) return;
 
-    // Verifica se o item já possui histórico de solicitações de aluguel.
-    // Se tiver, a exclusão física quebraria a integridade referencial —
-    // nesse caso, desativamos o anúncio em vez de apagá-lo.
-    const { count: solicitacoesCount } = await supabase
+    // Verifica se o item já possui histórico de solicitações de aluguel,
+    // pois nesse caso a exclusão precisa apagar também esse histórico
+    // (e as mensagens de chat ligadas a ele) para não violar a integridade referencial.
+    const { data: solicitacoes } = await supabase
       .from("solicitacao_aluguel")
-      .select("idsolicitacao", { count: "exact", head: true })
+      .select("idsolicitacao")
       .eq("iditem", id);
 
-    if (solicitacoesCount && solicitacoesCount > 0) {
-      if (!window.confirm(
-        "Este anúncio já tem solicitações de aluguel registradas e não pode ser excluído. " +
-        "Deseja desativá-lo para que ele pare de aparecer para outros usuários?"
-      )) return;
+    const temHistorico = !!solicitacoes && solicitacoes.length > 0;
 
-      const { error } = await supabase
-        .from("item")
-        .update({ disponivel: false })
-        .eq("iditem", id)
-        .eq("idlocador", user.id);
+    const confirmText = temHistorico
+      ? "Este anúncio já tem solicitações de aluguel (e conversas de chat) registradas. " +
+        "Excluir agora vai apagar esse histórico permanentemente, sem volta. Deseja continuar?"
+      : "Tem certeza que deseja excluir este anúncio?";
 
-      if (error) {
-        console.error("Erro ao desativar:", error);
-        alert("Erro ao desativar item: " + error.message);
-      } else {
-        setItems(items.map((item) => item.iditem === id ? { ...item, disponivel: false } : item));
-        alert("Item desativado com sucesso!");
+    if (!window.confirm(confirmText)) return;
+
+    if (temHistorico) {
+      const solicitacaoIds = solicitacoes!.map((s) => s.idsolicitacao);
+
+      // 1️⃣ Apagar as mensagens de chat ligadas às solicitações deste item
+      const { error: msgError } = await supabase
+        .from("mensagem")
+        .delete()
+        .in("idsolicitacao", solicitacaoIds);
+
+      if (msgError) {
+        console.error("Erro ao apagar mensagens:", msgError);
+        alert("Erro ao remover histórico de chat: " + msgError.message);
+        return;
       }
-      return;
+
+      // 2️⃣ Apagar as próprias solicitações de aluguel do item
+      const { error: solError } = await supabase
+        .from("solicitacao_aluguel")
+        .delete()
+        .eq("iditem", id);
+
+      if (solError) {
+        console.error("Erro ao apagar solicitações:", solError);
+        alert("Erro ao remover histórico de aluguel: " + solError.message);
+        return;
+      }
     }
 
-    if (!window.confirm("Tem certeza que deseja excluir este anúncio?")) return;
-
-    // 1️⃣ Apagar as referências de fotos primeiro (para evitar erro de chave estrangeira)
+    // 3️⃣ Apagar as referências de fotos (para evitar erro de chave estrangeira)
     const { error: photoError } = await supabase
       .from("fotoitem")
       .delete()
@@ -122,7 +135,7 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
       return;
     }
 
-    // 2️⃣ Agora sim apagamos o item
+    // 4️⃣ Agora sim apagamos o item
     const { data, error } = await supabase
       .from("item")
       .delete()
@@ -134,7 +147,21 @@ export default function MeusAnuncios({ onGoBack, onGoToPerfil, onGoToAnnounce, o
       console.error("Erro ao excluir:", error);
       alert("Erro ao excluir item: " + error.message);
     } else if (!data || data.length === 0) {
-      alert("Erro: Você não tem permissão para excluir este item.");
+      // O delete pode ter funcionado mesmo sem retornar a linha (comportamento
+      // do PostgREST em certas condições) — confirmamos checando se o item
+      // ainda existe antes de acusar erro de permissão.
+      const { data: aindaExiste } = await supabase
+        .from("item")
+        .select("iditem")
+        .eq("iditem", id)
+        .maybeSingle();
+
+      if (aindaExiste) {
+        alert("Erro: Você não tem permissão para excluir este item.");
+      } else {
+        setItems(items.filter((item) => item.iditem !== id));
+        alert("Item excluído com sucesso!");
+      }
     } else {
       setItems(items.filter((item) => item.iditem !== id));
       alert("Item excluído com sucesso!");
