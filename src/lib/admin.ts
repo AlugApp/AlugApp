@@ -2,6 +2,8 @@ import { supabase } from './supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { UserProfile } from '../contexts/AuthContext';
 
+import revokedAdminsData from '../config/revoked_admins.json';
+
 // Lista de e-mails de administradores autorizados por padrão
 const DEFAULT_ADMIN_EMAILS: string[] = [
   'mateusjoaquim10@gmail.com',
@@ -11,6 +13,32 @@ const DEFAULT_ADMIN_EMAILS: string[] = [
 ];
 
 const PROMOTED_ADMINS_KEY = 'alugapp_promoted_admins';
+const REVOKED_ADMINS_KEY = 'alugapp_revoked_admins';
+
+/**
+ * Recupera os e-mails de administradores cuja permissão foi revogada (via script ou ação)
+ */
+export function getRevokedAdmins(): string[] {
+  let localRevoked: string[] = [];
+  try {
+    const raw = localStorage.getItem(REVOKED_ADMINS_KEY);
+    localRevoked = raw ? JSON.parse(raw) : [];
+  } catch {
+    localRevoked = [];
+  }
+
+  const fileRevoked: string[] = Array.isArray(revokedAdminsData) ? (revokedAdminsData as string[]) : [];
+  const merged = [...fileRevoked, ...localRevoked].map((e) => e.trim().toLowerCase());
+  return Array.from(new Set(merged));
+}
+
+/**
+ * Verifica se o e-mail teve o papel de admin revogado
+ */
+export function isRevokedAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return getRevokedAdmins().includes(email.trim().toLowerCase());
+}
 
 /**
  * Recupera os e-mails de administradores promovidos dinamicamente
@@ -25,7 +53,7 @@ export function getPromotedAdmins(): string[] {
 }
 
 /**
- * Obtém a lista completa de e-mails com privilégios de administrador
+ * Obtém a lista completa de e-mails com privilégios de administrador (filtrando revogados)
  */
 export function getAdminEmails(): string[] {
   const envEmails = process.env.REACT_APP_ADMIN_EMAILS
@@ -33,9 +61,10 @@ export function getAdminEmails(): string[] {
     : [];
 
   const promoted = getPromotedAdmins().map((e) => e.toLowerCase());
+  const revoked = getRevokedAdmins();
 
   const all = [...DEFAULT_ADMIN_EMAILS, ...envEmails, ...promoted];
-  return Array.from(new Set(all.map((e) => e.toLowerCase())));
+  return Array.from(new Set(all.map((e) => e.toLowerCase()))).filter((e) => !revoked.includes(e));
 }
 
 /**
@@ -54,6 +83,14 @@ export async function promoteToAdmin(target: {
     promoted.push(email);
   }
   localStorage.setItem(PROMOTED_ADMINS_KEY, JSON.stringify(promoted));
+
+  // Remove da lista de revogados caso estivesse lá, restaurando a promoção
+  try {
+    const localRevoked = getRevokedAdmins().filter((e) => e !== email);
+    localStorage.setItem(REVOKED_ADMINS_KEY, JSON.stringify(localRevoked));
+  } catch {
+    // Ignora erro de storage
+  }
 
   // Tenta atualizar no banco se a coluna role ou is_admin existir
   try {
@@ -81,6 +118,17 @@ export async function demoteAdmin(target: {
   promoted = promoted.filter((e) => e.toLowerCase() !== email);
   localStorage.setItem(PROMOTED_ADMINS_KEY, JSON.stringify(promoted));
 
+  // Adiciona aos revogados
+  try {
+    const localRevoked = getRevokedAdmins();
+    if (!localRevoked.includes(email)) {
+      localRevoked.push(email);
+      localStorage.setItem(REVOKED_ADMINS_KEY, JSON.stringify(localRevoked));
+    }
+  } catch {
+    // Ignora erro de storage
+  }
+
   try {
     await supabase.from('users').update({ role: 'user', is_admin: false } as any).eq('email', email);
   } catch {
@@ -103,6 +151,13 @@ export function isAdmin(
 ): boolean {
   if (!user && !profile) return false;
 
+  const email = (user?.email || profile?.email || '').trim().toLowerCase();
+
+  // Se o usuário teve a permissão revogada via script ou ação administrativa, nega imediatamente
+  if (email && isRevokedAdmin(email)) {
+    return false;
+  }
+
   // 1. Verifica app_metadata ou user_metadata do Supabase Auth
   const appRole = (user?.app_metadata as any)?.role;
   const userRole = (user?.user_metadata as any)?.role;
@@ -111,8 +166,7 @@ export function isAdmin(
   // 2. Verifica propriedades no perfil se existirem
   if (profile?.role === 'admin' || profile?.is_admin === true) return true;
 
-  // 3. Verifica correspondência por e-mail
-  const email = (user?.email || profile?.email || '').trim().toLowerCase();
+  // 3. Verifica correspondência por e-mail na lista autorizada
   if (email && getAdminEmails().includes(email)) return true;
 
   return false;
