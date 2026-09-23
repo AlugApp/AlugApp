@@ -523,9 +523,9 @@ Tela de acesso restrito a administradores, protegida tanto pelo roteador `App.ts
    - Aplicação e remoção de desconto percentual (`desconto_percentual`), recalculando o valor promocional em tempo real.
 5. **Comunicação Direta:**
    - Botão "Conversar" junto a cada usuário listado no painel, permitindo abrir uma conversa instantânea na tela de Chat sem necessidade de requisição prévia de aluguel.
-6. **Promoção de Administradores com Autenticação de Segurança:**
+6. **Promoção de Administradores com Chave de Segurança:**
    - Botão **"Tornar Admin"** visível exclusivamente para contas que ainda não possuem privilégios.
-   - **Exigência de Reautenticação:** abre modal de segurança que exige a senha atual do administrador (para logins e-mail/senha) validada diretamente no Supabase Auth, ou a palavra-chave de autorização `PROMOVER` (para contas OAuth Google). Apenas com a autenticação confirmada o novo administrador é ativado.
+   - **Exigência de Autenticação Segura:** abre modal de segurança que exige a chave mestra de promoção de administradores (configurada na variável de ambiente `REACT_APP_ADMIN_PROMOTION_SECRET`). O valor da chave permanece estritamente protegido nas variáveis de ambiente locais e nunca é exposto no código ou na documentação.
 
 ---
 

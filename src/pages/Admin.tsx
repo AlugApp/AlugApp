@@ -106,7 +106,6 @@ export default function Admin({
   // Modal de promoção a Administrador com autenticação
   const [promotingTarget, setPromotingTarget] = useState<UserItem | null>(null);
   const [authPassword, setAuthPassword] = useState('');
-  const [authConfirmWord, setAuthConfirmWord] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
@@ -258,9 +257,7 @@ export default function Admin({
     }
   };
 
-  // ─── Promoção de Administrador com Autenticação Obrigatória ──────────────────
-  const isOAuthAdmin = user?.app_metadata?.provider !== 'email';
-
+  // ─── Promoção de Administrador com Chave de Segurança (.env) ─────────────────
   const handlePromoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!promotingTarget) return;
@@ -268,28 +265,17 @@ export default function Admin({
     setAuthLoading(true);
     setAuthError(null);
 
-    // Validação de autenticação
-    if (isOAuthAdmin) {
-      if (authConfirmWord.trim().toUpperCase() !== 'PROMOVER') {
-        setAuthLoading(false);
-        setAuthError('Digite a palavra PROMOVER para validar a operação.');
-        return;
-      }
-    } else {
-      if (!authPassword) {
-        setAuthLoading(false);
-        setAuthError('Digite sua senha de administrador.');
-        return;
-      }
-      const { error: authErr } = await supabase.auth.signInWithPassword({
-        email: user?.email || '',
-        password: authPassword,
-      });
-      if (authErr) {
-        setAuthLoading(false);
-        setAuthError('Senha de administrador incorreta. Acesso negado.');
-        return;
-      }
+    const requiredSecret = process.env.REACT_APP_ADMIN_PROMOTION_SECRET;
+    if (!requiredSecret) {
+      setAuthLoading(false);
+      setAuthError('Chave de segurança não configurada no ambiente (.env).');
+      return;
+    }
+
+    if (authPassword.trim() !== requiredSecret.trim()) {
+      setAuthLoading(false);
+      setAuthError('Senha de segurança incorreta. Acesso negado.');
+      return;
     }
 
     const res = await promoteToAdmin({
@@ -302,7 +288,6 @@ export default function Admin({
     setAuthLoading(false);
     setPromotingTarget(null);
     setAuthPassword('');
-    setAuthConfirmWord('');
     setFeedback({ type: res.success ? 'success' : 'error', text: res.message });
     loadData();
   };
@@ -702,7 +687,6 @@ export default function Admin({
                               onClick={() => {
                                 setPromotingTarget(u);
                                 setAuthPassword('');
-                                setAuthConfirmWord('');
                                 setAuthError(null);
                               }}
                               className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold flex items-center gap-1.5 transition border border-purple-200"
@@ -935,43 +919,23 @@ export default function Admin({
             )}
 
             <form onSubmit={handlePromoteSubmit} className="space-y-4 mt-4">
-              {isOAuthAdmin ? (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Confirmação de Segurança (Conta OAuth)
-                  </label>
-                  <p className="text-[11px] text-gray-500 mb-1.5">
-                    Como você acessou via Google, digite a palavra <strong>PROMOVER</strong> para autorizar:
-                  </p>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Digite PROMOVER"
-                    value={authConfirmWord}
-                    onChange={(e) => setAuthConfirmWord(e.target.value)}
-                    disabled={authLoading}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 text-center tracking-wider font-semibold"
-                  />
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Sua Senha de Administrador
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Digite sua senha atual"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    disabled={authLoading}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Confirme sua identidade para validar a concessão do papel.
-                  </p>
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Senha de Segurança de Administrador
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Digite a senha de segurança"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  disabled={authLoading}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Informe a chave de segurança para autorizar a promoção deste usuário.
+                </p>
+              </div>
 
               <div className="flex gap-2 pt-2">
                 <button
