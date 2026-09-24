@@ -511,21 +511,24 @@ Tela de acesso restrito a administradores, protegida tanto pelo roteador `App.ts
 1. **Controle de Acesso e Papéis (RBAC):**
    - Identificação baseada no módulo `admin.ts` (checando metadados do Supabase Auth, perfil e lista autorizada).
    - Tentativas de acesso por usuários comuns resultam em redirecionamento imediato para `home`.
-2. **Moderação de Anúncios:**
+2. **Moderação de Anúncios (Aba Anúncios):**
    - Lista completa com busca e status de todos os itens cadastrados no sistema (inclusive de outros administradores).
-   - **Exclusão Forçada:** remove o item permanentemente executando a limpeza cascateada de mensagens $\rightarrow$ solicitações $\rightarrow$ fotos $\rightarrow$ registro do item, evitando violações de chave estrangeira.
-3. **Moderação de Usuários (Banimento com Proteção):**
-   - Listagem de usuários com contador de anúncios ativos e status de banimento.
-   - **Regra Estrita de Segurança:** botões de banimento são permanentemente desabilitados para contas de administradores, impossibilitando que um administrador seja banido.
-   - Usuários banidos têm sua sessão imediatamente revogada em tempo de execução ao tentar interagir ou autenticar.
-4. **Gestão de Preços e Descontos:**
-   - Permite alteração forçada dos valores diário, semanal e mensal de qualquer item.
-   - Aplicação e remoção de desconto percentual (`desconto_percentual`), recalculando o valor promocional em tempo real.
-5. **Comunicação Direta:**
-   - Botão "Conversar" junto a cada usuário listado no painel, permitindo abrir uma conversa instantânea na tela de Chat sem necessidade de requisição prévia de aluguel.
-6. **Promoção de Administradores com Chave de Segurança:**
-   - Botão **"Tornar Admin"** visível exclusivamente para contas que ainda não possuem privilégios.
-   - **Exigência de Autenticação Segura:** abre modal de segurança que exige a chave mestra de promoção de administradores (configurada na variável de ambiente `REACT_APP_ADMIN_PROMOTION_SECRET`). O valor da chave permanece estritamente protegido nas variáveis de ambiente locais e nunca é exposto no código ou na documentação.
+   - **Exclusão Forçada em Cascata:** executada via RPC `admin_delete_item` com `SECURITY DEFINER`, que bypassa o RLS e remove atomicamente pagamentos $\rightarrow$ transações $\rightarrow$ mensagens $\rightarrow$ solicitações $\rightarrow$ fotos $\rightarrow$ item, evitando violações de chave estrangeira.
+3. **Moderação de Usuários (Aba Usuários):**
+   - Listagem com contador de anúncios e controle de banimento com proteção estrita para administradores.
+   - **Exclusão Definitiva de Contas:** botão para remoção física da conta via RPC `admin_delete_user`, com desvinculação completa de anúncios, transações, mensagens e avaliações.
+   - **Promoção a Administrador:** botão "Tornar Admin" com autenticação por chave de segurança (hash SHA-256 e variável de ambiente).
+   - **Comunicação Direta:** atalho para iniciar conversa imediata com qualquer usuário.
+4. **Monitoramento de Aluguéis (Aba Aluguéis):**
+   - Acompanhamento de todas as transações da plataforma (`solicitacao_aluguel` e `transacao_aluguel`).
+   - Exibição de locador, locatário, item, período, valores, status da solicitação, status de pagamento e de devolução.
+5. **Moderação de Avaliações (Aba Avaliações):**
+   - Listagem de todas as avaliações registradas (`avaliacao`), com estrelas, comentário, avaliador e avaliado.
+   - Opção para administradores removerem avaliações inadequadas via RPC `admin_delete_avaliacao`.
+6. **Log de Ações da Ferramenta (Aba Logs):**
+   - Histórico em tempo real de auditoria administrativa (`addAdminAuditLog`), registrando autor, data/hora, tipo de ação e alvo (exclusões, banimentos, promoções e alterações de preços).
+7. **Gestão Forçada de Preços e Descontos:**
+   - Permite alteração forçada dos valores diário, semanal e mensal de qualquer item, além de desconto percentual (`desconto_percentual`).
 
 ---
 
