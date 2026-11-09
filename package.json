@@ -1,8 +1,10 @@
 {
-  "name": "meu-app",
+  "name": "alugapp",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.1",
     "@supabase/supabase-js": "^2.57.4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.8.0",
@@ -26,7 +28,11 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "remover-admin": "node scripts/remover_admin.js"
+    "remover-admin": "node scripts/remover_admin.js",
+    "test:ci": "react-scripts test --watchAll=false --json --outputFile=test-results.json",
+    "qase:sync": "node scripts/qase/sync-casos.js",
+    "qase:report": "node scripts/qase/publicar-jest.js",
+    "qase:run-manual": "node scripts/qase/run-manual.js"
   },
   "eslintConfig": {
     "extends": [

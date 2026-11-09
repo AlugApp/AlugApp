@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-e-testes:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    env:
+      # Valores fictícios: o build e os testes não acessam o Supabase real.
+      REACT_APP_SUPABASE_URL: https://ci-placeholder.supabase.co
+      REACT_APP_SUPABASE_TOKEN: ci-placeholder
+      REACT_APP_ENCRYPTION_KEY: ci-placeholder-key
+      # Configure em Settings → Secrets and variables → Actions (opcional).
+      QASE_API_TOKEN: ${{ secrets.QASE_API_TOKEN }}
+      QASE_PROJECT_CODE: ${{ vars.QASE_PROJECT_CODE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verificação de tipos (TypeScript)
+        run: npx tsc --noEmit
+
+      - name: Testes (Jest)
+        run: npm run test:ci
+        env:
+          CI: true
+
+      - name: Build de produção
+        run: npm run build
+        env:
+          # Avisos de lint existentes (react-hooks/exhaustive-deps) não devem quebrar o build.
+          CI: false
+
+      - name: Publicar resultados no QASE.IO
+        if: always() && github.event_name == 'push' && env.QASE_API_TOKEN != ''
+        run: npm run qase:report
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: resultados-jest
+          path: test-results.json
+          if-no-files-found: ignore

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { oauthRedirectUrl } from '../lib/deepLink';
 import type { IconBaseProps } from 'react-icons';
 import { FaGoogle } from 'react-icons/fa';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
@@ -21,7 +22,7 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
 
   const handleOAuth = async (provider: 'google') => {
     setMessage(null);
-    const redirectUrl = process.env.REACT_APP_SITE_URL || window.location.origin;
+    const redirectUrl = oauthRedirectUrl();
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -168,6 +169,11 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
               Criar conta
             </button>
           </p>
+          <p className="text-center text-xs text-gray-400 mt-4">
+            <a href="https://alugapp.vercel.app/politica-privacidade.html" target="_blank" rel="noopener noreferrer" className="hover:underline">
+              Política de Privacidade
+            </a>
+          </p>
         </div>
       </div>
 
@@ -252,6 +258,10 @@ const Login: React.FC<LoginFormProps> = ({ onGoToRegister, onForgotPassword }) =
               className="border-2 border-white text-white font-bold py-3 px-10 rounded-full text-sm tracking-widest hover:bg-white hover:text-blue-700 transition">
               CRIAR CONTA
             </button>
+            <a href="https://alugapp.vercel.app/politica-privacidade.html" target="_blank" rel="noopener noreferrer"
+              className="text-blue-200 text-xs hover:underline">
+              Política de Privacidade
+            </a>
           </div>
 
         </div>

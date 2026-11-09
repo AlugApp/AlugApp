@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './lib/supabaseClient';
+import { initDeepLinks } from './lib/deepLink';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Cadastro from './pages/Cadastro';
@@ -246,7 +247,18 @@ const AppContent: React.FC = () => {
         setAuthMode('update-password');
       }
     });
-    return () => subscription.unsubscribe();
+    // App Android: links de e-mail e retorno do Google chegam por deep link
+    const stopDeepLinks = initDeepLinks({
+      onRecovery: () => setAuthMode('update-password'),
+      onError: (message) => {
+        setAuthMode('login');
+        alert(message);
+      },
+    });
+    return () => {
+      subscription.unsubscribe();
+      stopDeepLinks();
+    };
   }, []);
 
   // Verifica se MFA (AAL2) é necessário — roda apenas quando o user muda (login/logout)

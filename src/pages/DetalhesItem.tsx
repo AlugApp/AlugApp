@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
+import { parseSentinels, rangeContemIndisponivel as rangeContemIndisponivelLib, calcularTotal as calcularTotalLib } from "../lib/aluguel";
 import { ArrowLeft, Star, MessageSquare, Package, ShoppingBag, ChevronLeft, ChevronRight, CheckCircle, XCircle } from "lucide-react";
 
 interface DetalhesProps {
@@ -18,12 +19,6 @@ const REGRAS = [
   { titulo: "Disponibilidade", texto: "O responsável pelo item deve estar disponível para a entrega e retirada nos horários combinados." },
   { titulo: "Pagamento", texto: "O pagamento poderá ser processado pelo aplicativo ou diretamente ao responsável pelo item." },
 ];
-
-function parseSentinels(datas: string[]) {
-  return datas
-    .filter(d => d.startsWith("REC:"))
-    .map(d => Number(d.split(":")[1]));
-}
 
 function CalendarioLeitura({ datasIndisponiveis }: { datasIndisponiveis: string[] }) {
   const hoje = new Date();
@@ -167,33 +162,11 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
 
   const datasIndisponiveis: string[] = Array.isArray(item?.datas_indisponiveis) ? item.datas_indisponiveis : [];
   const adicionais: string[] = Array.isArray(item?.adicionais) ? item.adicionais : [];
-  const recorrentes = parseSentinels(datasIndisponiveis);
+  const rangeContemIndisponivel = (inicio: string, fim: string) =>
+    rangeContemIndisponivelLib(datasIndisponiveis, inicio, fim);
 
-  const rangeContemIndisponivel = (inicio: string, fim: string) => {
-    if (!inicio || !fim) return false;
-    const start = new Date(inicio + "T12:00:00");
-    const end = new Date(fim + "T12:00:00");
-    for (const ds of datasIndisponiveis) {
-      if (ds.startsWith("REC:")) continue;
-      const d = new Date(ds + "T12:00:00");
-      if (d >= start && d <= end) return true;
-    }
-    if (recorrentes.length > 0) {
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        if (recorrentes.includes(d.getDay())) return true;
-      }
-    }
-    return false;
-  };
-
-  const calcularTotal = () => {
-    if (!aluguel.inicio || !aluguel.fim || !item) return null;
-    const dias = Math.ceil(
-      (new Date(aluguel.fim).getTime() - new Date(aluguel.inicio).getTime()) / 86400000
-    );
-    if (dias <= 0) return null;
-    return { dias, total: dias * Number(item.valor_aluguel_diario) };
-  };
+  const calcularTotal = () =>
+    item ? calcularTotalLib(aluguel.inicio, aluguel.fim, Number(item.valor_aluguel_diario)) : null;
 
   const handleSolicitar = async () => {
     if (!aluguel.inicio || !aluguel.fim) {

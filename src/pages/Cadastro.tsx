@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { emailRedirectUrl, oauthRedirectUrl } from '../lib/deepLink';
+import { maskDate, maskCPF, validateCPF, maskPhone, maskCEP } from '../lib/validacoes';
 import type { IconBaseProps } from 'react-icons';
 import { FaGoogle } from 'react-icons/fa';
 import { Eye, EyeOff, Loader2, Calendar } from 'lucide-react';
@@ -9,55 +11,6 @@ type MessageState = { type: 'success' | 'error'; text: string } | null;
 interface RegistrationFormProps {
   onGoToLogin: () => void;
 }
-
-// ─── Máscaras ─────────────────────────────────────────────────────────────────
-
-const maskDate = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
-};
-
-const maskCPF = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  return d
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-};
-
-const validateCPF = (cpf: string) => {
-  const digits = cpf.replace(/\D/g, '');
-  if (digits.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(digits)) return false;
-
-  const calcVerifier = (slice: number) => {
-    const numbers = digits.slice(0, slice).split('').map(Number);
-    const factor = slice + 1;
-    const total = numbers.reduce((acc, num, index) => acc + num * (factor - index), 0);
-    const remainder = total % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-
-  const firstVerifier = calcVerifier(9);
-  const secondVerifier = calcVerifier(10);
-
-  return firstVerifier === Number(digits[9]) && secondVerifier === Number(digits[10]);
-};
-
-const maskPhone = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-};
-
-const maskCEP = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 5) return d;
-  return `${d.slice(0, 5)}-${d.slice(5)}`;
-};
 
 // ─── Lista de UFs ─────────────────────────────────────────────────────────────
 
@@ -102,7 +55,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
   const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set());
 
   const handleOAuth = async () => {
-    const redirectUrl = process.env.REACT_APP_SITE_URL || window.location.origin;
+    const redirectUrl = oauthRedirectUrl();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -322,7 +275,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: emailRedirectUrl() },
       });
 
       if (authError) {
@@ -369,7 +322,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         const { data: retryData, error: retryError } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
-          options: { emailRedirectTo: window.location.origin },
+          options: { emailRedirectTo: emailRedirectUrl() },
         });
         if (retryError || !retryData.user) {
           setMessage({ type: 'error', text: 'Erro ao criar conta. Tente novamente.' });

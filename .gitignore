@@ -52,3 +52,6 @@ yarn-error.log*
 /mobile/keystore.properties
 # Artefatos publicaveis
 /mobile/dist
+
+# resultados do Jest para o QASE.IO
+test-results.json

@@ -18,6 +18,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Deep link de autenticação: links de e-mail do Supabase e retorno do Google
+                 (com.alugapp.app://auth-callback). Ver mobile/README.md. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.alugapp.app" android:host="auth-callback" />
+            </intent-filter>
         </activity>
 
         <provider

@@ -1,0 +1,1664 @@
+{
+  "$comment": "Catálogo de cenários (suítes) e casos de teste do AlugApp sincronizado com o QASE.IO por scripts/qase/sync-casos.js. A chave (key) é o ID estável usado nos testes automatizados e no documento; o ID numérico do Qase fica em qase/ids.json.",
+  "planos": [
+    {
+      "key": "PLANO-INTERNO",
+      "title": "Plano de Testes Internos — MVP ambiente fechado (Sprint 04)",
+      "description": "Executado pelos desenvolvedores antes da liberação na faixa de teste fechado da Play Store. Inclui todos os casos automatizados (unitários e de componente, executados a cada push pelo CI) e os casos funcionais manuais de fluxo crítico (web e Android).",
+      "suites": [
+        "*"
+      ]
+    },
+    {
+      "key": "PLANO-ALFA",
+      "title": "Plano de Testes Alfa — usuários-chave (Sprint 05)",
+      "description": "Roteiro aplicado a pelo menos 5 usuários-chave no ambiente fechado (Play Store teste fechado). Cobre os fluxos de ponta a ponta do locador e do locatário.",
+      "tags": [
+        "alfa"
+      ]
+    },
+    {
+      "key": "PLANO-BETA",
+      "title": "Plano de Testes Beta — usuários gerais (Sprint 07)",
+      "description": "Smoke test dos fluxos principais executado por usuários gerais no ambiente aberto, complementado por formulário de feedback.",
+      "tags": [
+        "beta"
+      ]
+    }
+  ],
+  "suites": [
+    {
+      "key": "S01",
+      "title": "01 · Cadastro e perfil do usuário",
+      "description": "Cenário: um visitante cria sua conta informando dados pessoais válidos, mantém o perfil atualizado e pode excluir a conta. Requisitos: RF001, RF002, RF003, RF004, RF007, RF011, RF012, RNF006, RNF010.",
+      "cases": [
+        {
+          "key": "CT-001",
+          "title": "Cadastrar usuário com dados válidos",
+          "rf": [
+            "RF001",
+            "RF002",
+            "RF003"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Usuário deslogado. E-mail e CPF ainda não cadastrados.",
+          "steps": [
+            {
+              "action": "Na tela de Login, tocar em \"Cadastre-se\"",
+              "expected_result": "Formulário de cadastro é exibido"
+            },
+            {
+              "action": "Preencher nome, e-mail, CPF, data de nascimento, telefone e gênero",
+              "data": "CPF 529.982.247-25 · tel (61) 99548-7878 · nasc. 10/11/2000",
+              "expected_result": "Máscaras aplicadas automaticamente nos campos"
+            },
+            {
+              "action": "Informar o CEP",
+              "data": "70790-075",
+              "expected_result": "Rua, bairro, cidade e UF preenchidos automaticamente (ViaCEP)"
+            },
+            {
+              "action": "Informar senha válida, aceitar os termos e enviar",
+              "data": "Senha@123",
+              "expected_result": "Conta criada e mensagem para confirmar o e-mail exibida"
+            }
+          ]
+        },
+        {
+          "key": "CT-002",
+          "title": "Bloquear cadastro com CPF inválido",
+          "rf": [
+            "RF002"
+          ],
+          "severity": "major",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "negative",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Formulário de cadastro aberto.",
+          "steps": [
+            {
+              "action": "Preencher todos os campos com dados válidos, exceto o CPF",
+              "data": "CPF 529.982.247-24 (dígito verificador errado)",
+              "expected_result": "Campo CPF destacado como inválido"
+            },
+            {
+              "action": "Enviar o formulário",
+              "expected_result": "Cadastro não é realizado e mensagem de CPF inválido é exibida"
+            }
+          ]
+        },
+        {
+          "key": "CT-003",
+          "title": "Bloquear cadastro com e-mail, CPF ou telefone já existentes",
+          "rf": [
+            "RF001"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Existe um usuário cadastrado com o e-mail/CPF/telefone informados.",
+          "steps": [
+            {
+              "action": "Preencher o cadastro reutilizando o e-mail de um usuário existente e enviar",
+              "expected_result": "Mensagem de e-mail já cadastrado"
+            },
+            {
+              "action": "Repetir com CPF já cadastrado",
+              "expected_result": "Mensagem de CPF já cadastrado"
+            },
+            {
+              "action": "Repetir com telefone já cadastrado",
+              "expected_result": "Mensagem de telefone já cadastrado"
+            }
+          ]
+        },
+        {
+          "key": "CT-004",
+          "title": "Bloquear e-mail temporário/descartável",
+          "rf": [
+            "RF004"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Formulário de cadastro aberto.",
+          "steps": [
+            {
+              "action": "Informar e-mail de domínio descartável e enviar",
+              "data": "teste@mailinator.com",
+              "expected_result": "Cadastro bloqueado com mensagem de e-mail inválido/descartável"
+            }
+          ]
+        },
+        {
+          "key": "CT-005",
+          "title": "Validar regras de senha no cadastro",
+          "rf": [
+            "RF001",
+            "RNF003"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "security",
+          "behavior": "negative",
+          "preconditions": "Formulário de cadastro aberto.",
+          "steps": [
+            {
+              "action": "Informar senha com menos de 6 caracteres",
+              "data": "Ab1",
+              "expected_result": "Senha recusada"
+            },
+            {
+              "action": "Informar senha sem letra maiúscula ou sem número",
+              "data": "senhafraca",
+              "expected_result": "Senha recusada com orientação das regras"
+            }
+          ]
+        },
+        {
+          "key": "CT-006",
+          "title": "Completar perfil após primeiro login com Google",
+          "rf": [
+            "RF007"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Conta Google nunca usada no AlugApp.",
+          "steps": [
+            {
+              "action": "Entrar com Google",
+              "expected_result": "Tela Completar Perfil é exibida com nome e e-mail do Google preenchidos"
+            },
+            {
+              "action": "Tentar continuar sem CPF/telefone/CEP",
+              "expected_result": "Campos obrigatórios sinalizados"
+            },
+            {
+              "action": "Preencher CPF, telefone, CEP e data de nascimento válidos e salvar",
+              "expected_result": "Usuário é levado à Home já autenticado"
+            }
+          ]
+        },
+        {
+          "key": "CT-007",
+          "title": "Editar dados cadastrais e foto de avatar",
+          "rf": [
+            "RF011"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Usuário logado.",
+          "steps": [
+            {
+              "action": "Perfil → Editar perfil; alterar telefone e endereço",
+              "expected_result": "Campos aceitam a alteração com máscaras"
+            },
+            {
+              "action": "Enviar uma nova foto de avatar",
+              "expected_result": "Pré-visualização atualizada"
+            },
+            {
+              "action": "Salvar",
+              "expected_result": "Perfil exibe os novos dados e o novo avatar"
+            }
+          ]
+        },
+        {
+          "key": "CT-008",
+          "title": "Exibir CPF descriptografado apenas ao titular",
+          "rf": [
+            "RF002",
+            "RNF010"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "security",
+          "behavior": "positive",
+          "preconditions": "Usuário logado com CPF cadastrado.",
+          "steps": [
+            {
+              "action": "Abrir Perfil → aba Informações",
+              "expected_result": "CPF exibido corretamente para o próprio usuário"
+            },
+            {
+              "action": "Consultar a coluna cpf da tabela users no Supabase",
+              "expected_result": "Valor armazenado está cifrado (não legível)"
+            }
+          ]
+        },
+        {
+          "key": "CT-009",
+          "title": "Excluir a própria conta",
+          "rf": [
+            "RF012",
+            "RNF006"
+          ],
+          "severity": "critical",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "destructive",
+          "preconditions": "Usuário de teste descartável logado.",
+          "steps": [
+            {
+              "action": "Perfil → Segurança → Excluir conta",
+              "expected_result": "Modal solicita a senha"
+            },
+            {
+              "action": "Informar senha errada e confirmar",
+              "expected_result": "Exclusão negada"
+            },
+            {
+              "action": "Informar a senha correta e confirmar",
+              "expected_result": "Conta e dados vinculados removidos; usuário volta ao Login e não consegue mais entrar"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S02",
+      "title": "02 · Autenticação e segurança",
+      "description": "Cenário: o usuário acessa o app com e-mail/senha ou Google, protege a conta com MFA e recupera/altera a senha. Requisitos: RF005, RF006, RF008, RF009, RF010, RNF003.",
+      "cases": [
+        {
+          "key": "CT-010",
+          "title": "Login com e-mail e senha válidos",
+          "rf": [
+            "RF005"
+          ],
+          "severity": "blocker",
+          "priority": "high",
+          "type": "smoke",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Usuário cadastrado e com e-mail confirmado.",
+          "steps": [
+            {
+              "action": "Informar e-mail e senha e tocar em Entrar",
+              "expected_result": "Mensagem de sucesso e Home exibida"
+            },
+            {
+              "action": "Fechar e reabrir o app",
+              "expected_result": "Sessão mantida (usuário continua logado)"
+            }
+          ]
+        },
+        {
+          "key": "CT-011",
+          "title": "Login com senha incorreta",
+          "rf": [
+            "RF005"
+          ],
+          "severity": "major",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Usuário cadastrado.",
+          "steps": [
+            {
+              "action": "Informar e-mail correto e senha errada",
+              "expected_result": "Mensagem \"E-mail ou senha inválidos.\" e permanência no Login"
+            }
+          ]
+        },
+        {
+          "key": "CT-012",
+          "title": "Login com Google sem expor tokens na URL",
+          "rf": [
+            "RF006"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta"
+          ],
+          "preconditions": "Conta Google com perfil completo no AlugApp.",
+          "steps": [
+            {
+              "action": "Tocar em \"Entrar com Google\" e escolher a conta",
+              "expected_result": "Retorna ao AlugApp (não ao site do Supabase)"
+            },
+            {
+              "action": "Verificar a barra de endereço (web)",
+              "expected_result": "URL sem access_token nem code"
+            }
+          ]
+        },
+        {
+          "key": "CT-013",
+          "title": "Ativar MFA e exigir código TOTP no login",
+          "rf": [
+            "RF008"
+          ],
+          "severity": "critical",
+          "priority": "medium",
+          "type": "security",
+          "behavior": "positive",
+          "preconditions": "Usuário logado sem MFA; app autenticador instalado.",
+          "steps": [
+            {
+              "action": "Perfil → Segurança → Ativar 2FA e escanear o QR Code",
+              "expected_result": "QR Code exibido"
+            },
+            {
+              "action": "Informar o código de 6 dígitos",
+              "expected_result": "MFA ativado"
+            },
+            {
+              "action": "Sair e entrar novamente com e-mail/senha",
+              "expected_result": "Tela de verificação MFA exigida antes da Home"
+            },
+            {
+              "action": "Informar código inválido",
+              "data": "000000",
+              "expected_result": "Acesso negado"
+            }
+          ]
+        },
+        {
+          "key": "CT-014",
+          "title": "Recuperar senha por e-mail",
+          "rf": [
+            "RF009"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Usuário cadastrado com acesso ao e-mail.",
+          "steps": [
+            {
+              "action": "Login → Esqueci minha senha; informar o e-mail",
+              "expected_result": "Mensagem de envio do link"
+            },
+            {
+              "action": "Abrir o link recebido",
+              "expected_result": "Tela Redefinir Senha exibida (no app/web do AlugApp)"
+            },
+            {
+              "action": "Definir nova senha e entrar com ela",
+              "expected_result": "Login realizado com a nova senha; senha antiga não funciona"
+            }
+          ]
+        },
+        {
+          "key": "CT-015",
+          "title": "Alterar senha exigindo a senha atual",
+          "rf": [
+            "RF010"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "security",
+          "behavior": "negative",
+          "preconditions": "Usuário logado com e-mail/senha.",
+          "steps": [
+            {
+              "action": "Perfil → Segurança → Alterar senha com senha atual incorreta",
+              "expected_result": "Alteração recusada"
+            },
+            {
+              "action": "Repetir com a senha atual correta",
+              "expected_result": "Senha alterada com sucesso"
+            }
+          ]
+        },
+        {
+          "key": "CT-016",
+          "title": "Usuário banido não consegue acessar",
+          "rf": [
+            "RF034"
+          ],
+          "severity": "critical",
+          "priority": "medium",
+          "type": "security",
+          "behavior": "negative",
+          "preconditions": "Usuário banido por um administrador.",
+          "steps": [
+            {
+              "action": "Entrar com a conta banida em outro dispositivo",
+              "expected_result": "Aviso de conta suspensa e sessão encerrada"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S03",
+      "title": "03 · Anúncios de itens (locador)",
+      "description": "Cenário: o locador anuncia um item com fotos, preços por período, indisponibilidade e adicionais, e gerencia seus anúncios. Requisitos: RF013, RF014, RF015, RF016, RF017, RF018, RF021.",
+      "cases": [
+        {
+          "key": "CT-017",
+          "title": "Publicar anúncio completo",
+          "rf": [
+            "RF013",
+            "RF014",
+            "RF015",
+            "RF017",
+            "RF018"
+          ],
+          "severity": "blocker",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Locador logado com endereço completo no perfil.",
+          "steps": [
+            {
+              "action": "Anunciar → adicionar 3 fotos e arrastar a 3ª para a primeira posição",
+              "expected_result": "Ordem atualizada; primeira foto marcada como capa"
+            },
+            {
+              "action": "Preencher título, categoria, estado e descrição",
+              "data": "Furadeira Bosch · Ferramentas · Seminovo",
+              "expected_result": "Campos aceitos"
+            },
+            {
+              "action": "Informar diária",
+              "data": "R$ 50,00",
+              "expected_result": "Semanal R$ 315,00 (−10%) e mensal R$ 1.200,00 (−20%) calculados"
+            },
+            {
+              "action": "Marcar adicionais e publicar",
+              "data": "Entrega incluída; Manual",
+              "expected_result": "Anúncio publicado e visível no catálogo com a capa escolhida"
+            }
+          ]
+        },
+        {
+          "key": "CT-018",
+          "title": "Impedir publicação sem foto ou sem campos obrigatórios",
+          "rf": [
+            "RF013",
+            "RF014"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Locador logado.",
+          "steps": [
+            {
+              "action": "Tentar publicar sem nenhuma foto",
+              "expected_result": "Publicação bloqueada com aviso"
+            },
+            {
+              "action": "Tentar publicar sem título ou sem diária",
+              "expected_result": "Publicação bloqueada com aviso"
+            }
+          ]
+        },
+        {
+          "key": "CT-019",
+          "title": "Categoria \"Outros\" exige subtipo",
+          "rf": [
+            "RF013"
+          ],
+          "severity": "minor",
+          "priority": "low",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Formulário de anúncio aberto.",
+          "steps": [
+            {
+              "action": "Selecionar categoria Outros e deixar o subtipo vazio",
+              "expected_result": "Publicação bloqueada pedindo o subtipo"
+            }
+          ]
+        },
+        {
+          "key": "CT-020",
+          "title": "Configurar datas e dias recorrentes de indisponibilidade",
+          "rf": [
+            "RF016"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Formulário de anúncio aberto.",
+          "steps": [
+            {
+              "action": "Marcar duas datas no calendário e bloquear sábados e domingos",
+              "expected_result": "Datas destacadas e aviso de bloqueio semanal"
+            },
+            {
+              "action": "Publicar e abrir o item → aba Indisponibilidade",
+              "expected_result": "Datas e fins de semana aparecem indisponíveis"
+            }
+          ]
+        },
+        {
+          "key": "CT-021",
+          "title": "Editar e excluir anúncio em Meus Anúncios",
+          "rf": [
+            "RF021"
+          ],
+          "severity": "major",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Locador com ao menos um anúncio sem aluguel ativo.",
+          "steps": [
+            {
+              "action": "Meus Anúncios → Editar; alterar preço e remover uma foto; salvar",
+              "expected_result": "Alterações refletidas nos detalhes do item"
+            },
+            {
+              "action": "Excluir o anúncio e confirmar",
+              "expected_result": "Anúncio some de Meus Anúncios e do catálogo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S04",
+      "title": "04 · Catálogo, busca e detalhes do item",
+      "description": "Cenário: o locatário encontra itens por texto, filtros e proximidade e consulta os detalhes antes de alugar. Requisitos: RF019, RF020, RF022, RNF001.",
+      "cases": [
+        {
+          "key": "CT-022",
+          "title": "Buscar itens por texto, categoria e faixa de preço",
+          "rf": [
+            "RF019"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Catálogo com itens de categorias e preços variados.",
+          "steps": [
+            {
+              "action": "Buscar por parte do nome",
+              "data": "furad",
+              "expected_result": "Somente itens cujo nome/descrição contém o termo"
+            },
+            {
+              "action": "Aplicar categoria e faixa de preço",
+              "data": "Ferramentas · R$ 20 a R$ 60 / dia",
+              "expected_result": "Lista respeita todos os filtros"
+            },
+            {
+              "action": "Abrir um item e voltar",
+              "expected_result": "Filtros mantidos"
+            },
+            {
+              "action": "Limpar filtros",
+              "expected_result": "Catálogo completo exibido"
+            }
+          ]
+        },
+        {
+          "key": "CT-023",
+          "title": "Filtrar itens por raio de proximidade",
+          "rf": [
+            "RF020",
+            "RNF013"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Itens com coordenadas a distâncias conhecidas do dispositivo.",
+          "steps": [
+            {
+              "action": "Ativar proximidade e permitir a localização",
+              "expected_result": "Permissão solicitada; distância exibida nos cards"
+            },
+            {
+              "action": "Selecionar raio de 1 km e depois 10 km",
+              "expected_result": "Apenas itens dentro de cada raio são listados"
+            },
+            {
+              "action": "Negar a permissão de localização",
+              "expected_result": "Mensagem de erro amigável, sem travar a tela"
+            }
+          ]
+        },
+        {
+          "key": "CT-024",
+          "title": "Visualizar detalhes do item",
+          "rf": [
+            "RF022"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "beta"
+          ],
+          "preconditions": "Item com várias fotos, indisponibilidades e adicionais.",
+          "steps": [
+            {
+              "action": "Abrir o item e navegar no carrossel",
+              "expected_result": "Todas as fotos exibidas na ordem definida"
+            },
+            {
+              "action": "Conferir preços, regras, locador e calendário",
+              "expected_result": "Valores com desconto, 5 regras, dados do locador e dias indisponíveis em vermelho"
+            }
+          ]
+        },
+        {
+          "key": "CT-025",
+          "title": "Item com aluguel ativo fica indisponível no catálogo",
+          "rf": [
+            "RF025"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "Item com solicitação aprovada e em andamento.",
+          "steps": [
+            {
+              "action": "Buscar o item no catálogo com outra conta",
+              "expected_result": "Item não aparece ou aparece como indisponível"
+            },
+            {
+              "action": "Concluir a devolução e buscar novamente",
+              "expected_result": "Item volta a ficar disponível"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S05",
+      "title": "05 · Fluxo de aluguel (locatário ↔ locador)",
+      "description": "Cenário: o locatário solicita o aluguel de um item; o locador aprova, registra a vistoria fotográfica; o locatário confirma o recebimento e devolve. Requisitos: RF023, RF024, RF025, RF026, RF027.",
+      "cases": [
+        {
+          "key": "CT-026",
+          "title": "Solicitar aluguel com cálculo do total",
+          "rf": [
+            "RF023"
+          ],
+          "severity": "blocker",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Locatário logado; item disponível de outro usuário com diária R$ 50,00.",
+          "steps": [
+            {
+              "action": "Detalhes do item → Alugar; informar início e fim",
+              "data": "10/11 a 12/11",
+              "expected_result": "Total exibido: 2 diárias = R$ 100,00"
+            },
+            {
+              "action": "Enviar a solicitação",
+              "expected_result": "\"Solicitação enviada com sucesso!\" e pedido aparece em Minhas Requisições como pendente"
+            }
+          ]
+        },
+        {
+          "key": "CT-027",
+          "title": "Bloquear solicitação com período inválido ou indisponível",
+          "rf": [
+            "RF023",
+            "RF016"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "negative",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Item com 15/11 indisponível e fins de semana bloqueados.",
+          "steps": [
+            {
+              "action": "Informar fim anterior ao início",
+              "expected_result": "Erro: devolução deve ser após o início"
+            },
+            {
+              "action": "Informar período que inclui 15/11",
+              "expected_result": "Erro: período contém datas indisponíveis"
+            },
+            {
+              "action": "Informar período que inclui um sábado",
+              "expected_result": "Erro: período contém datas indisponíveis"
+            }
+          ]
+        },
+        {
+          "key": "CT-028",
+          "title": "Dono não consegue alugar o próprio item",
+          "rf": [
+            "RF023"
+          ],
+          "severity": "normal",
+          "priority": "low",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Locador logado.",
+          "steps": [
+            {
+              "action": "Abrir os detalhes de um item próprio",
+              "expected_result": "Barra inferior mostra \"Você é o proprietário\" sem botão Alugar"
+            }
+          ]
+        },
+        {
+          "key": "CT-029",
+          "title": "Locador aceita ou rejeita a solicitação",
+          "rf": [
+            "RF024"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Duas solicitações pendentes para itens do locador.",
+          "steps": [
+            {
+              "action": "Chat → Pedidos Recebidos → Aceitar a primeira",
+              "expected_result": "Status muda para aprovado nos dois lados"
+            },
+            {
+              "action": "Rejeitar a segunda",
+              "expected_result": "Status rejeitado, sem ações disponíveis"
+            }
+          ]
+        },
+        {
+          "key": "CT-030",
+          "title": "Locatário cancela solicitação pendente",
+          "rf": [
+            "RF024"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "Solicitação pendente do locatário.",
+          "steps": [
+            {
+              "action": "Minhas Requisições → Cancelar Solicitação",
+              "expected_result": "Status cancelado para ambos"
+            }
+          ]
+        },
+        {
+          "key": "CT-031",
+          "title": "Vistoria com foto antes da entrega",
+          "rf": [
+            "RF026",
+            "RF038"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Solicitação aprovada; app Android.",
+          "steps": [
+            {
+              "action": "Locador: Fotografar Estado do Item",
+              "expected_result": "Câmera do aparelho abre"
+            },
+            {
+              "action": "Tirar a foto e confirmar",
+              "expected_result": "Foto enviada; status aguardando entrega"
+            }
+          ]
+        },
+        {
+          "key": "CT-032",
+          "title": "Confirmar recebimento com foto e devolver",
+          "rf": [
+            "RF027",
+            "RF024",
+            "RF025"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Solicitação aguardando entrega.",
+          "steps": [
+            {
+              "action": "Locatário: Confirmar Recebimento e tirar a foto",
+              "expected_result": "Status em andamento; locador vê as duas fotos"
+            },
+            {
+              "action": "Locatário: Devolver Item",
+              "expected_result": "Status concluído; item volta a ficar disponível"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S06",
+      "title": "06 · Chat, moderação e notificações",
+      "description": "Cenário: locador e locatário conversam em tempo real, com moderação automática de linguagem, e recebem notificações in-app. Requisitos: RF028, RF029, RF030, RNF012.",
+      "cases": [
+        {
+          "key": "CT-033",
+          "title": "Troca de mensagens em tempo real",
+          "rf": [
+            "RF028"
+          ],
+          "severity": "critical",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta"
+          ],
+          "preconditions": "Locador e locatário com aluguel ativo, logados em dois dispositivos.",
+          "steps": [
+            {
+              "action": "Locatário envia mensagem",
+              "expected_result": "Mensagem aparece para o locador sem recarregar"
+            },
+            {
+              "action": "Locador responde",
+              "expected_result": "Resposta aparece para o locatário em ordem cronológica"
+            }
+          ]
+        },
+        {
+          "key": "CT-034",
+          "title": "Conversas agrupadas por pessoa nas duas abas",
+          "rf": [
+            "RF028"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "Dois aluguéis entre as mesmas pessoas.",
+          "steps": [
+            {
+              "action": "Abrir Chat → Pedidos Recebidos (locador) e Minhas Requisições (locatário)",
+              "expected_result": "Um único card por pessoa com indicação \"+2 aluguéis\""
+            }
+          ]
+        },
+        {
+          "key": "CT-035",
+          "title": "Censurar palavrões sem afetar palavras legítimas",
+          "rf": [
+            "RF029",
+            "RNF012"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "negative",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Conversa aberta com aluguel ativo.",
+          "steps": [
+            {
+              "action": "Enviar mensagem com palavrão",
+              "data": "que merda",
+              "expected_result": "Mensagem gravada como \"que *****\""
+            },
+            {
+              "action": "Enviar mensagem com palavras comuns",
+              "data": "Tenha cuidado com o documento",
+              "expected_result": "Mensagem gravada sem asteriscos"
+            }
+          ]
+        },
+        {
+          "key": "CT-036",
+          "title": "Envio bloqueado sem aluguel ativo",
+          "rf": [
+            "RF028",
+            "RF036"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "negative",
+          "preconditions": "Conversa apenas com aluguéis concluídos/cancelados.",
+          "steps": [
+            {
+              "action": "Tentar digitar uma mensagem como usuário comum",
+              "expected_result": "Campo de mensagem bloqueado"
+            }
+          ]
+        },
+        {
+          "key": "CT-037",
+          "title": "Notificações in-app de solicitação, status e mensagem",
+          "rf": [
+            "RF030"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Dois usuários logados em dispositivos diferentes.",
+          "steps": [
+            {
+              "action": "Locatário envia uma solicitação",
+              "expected_result": "Locador recebe toast e badge no sino/Chat"
+            },
+            {
+              "action": "Locador aprova",
+              "expected_result": "Locatário recebe toast de atualização de status"
+            },
+            {
+              "action": "Enviar mensagem",
+              "expected_result": "Destinatário recebe toast e badge na barra inferior"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S07",
+      "title": "07 · Dashboard do usuário",
+      "description": "Cenário: locador e locatário acompanham seus números de aluguel. Requisito: RF031.",
+      "cases": [
+        {
+          "key": "CT-038",
+          "title": "Dashboard do locador e do locatário",
+          "rf": [
+            "RF031"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "positive",
+          "tags": [
+            "alfa"
+          ],
+          "preconditions": "Usuário com aluguéis concluídos como locador e como locatário.",
+          "steps": [
+            {
+              "action": "Abrir Dashboard na visão Locador",
+              "expected_result": "Faturamento total/anual, ticket médio e contagem por status coerentes com os aluguéis"
+            },
+            {
+              "action": "Alternar para Locatário",
+              "expected_result": "Total gasto e aluguéis realizados coerentes"
+            },
+            {
+              "action": "Trocar o ano selecionado",
+              "expected_result": "Gráfico mensal e KPIs anuais atualizados"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S08",
+      "title": "08 · Administração e moderação",
+      "description": "Cenário: administradores moderam anúncios, usuários, avaliações e preços, com trilha de auditoria; usuários comuns não acessam o painel. Requisitos: RF032 a RF037, RNF009.",
+      "cases": [
+        {
+          "key": "CT-039",
+          "title": "Usuário comum não acessa o painel Admin",
+          "rf": [
+            "RF032"
+          ],
+          "severity": "blocker",
+          "priority": "high",
+          "type": "security",
+          "behavior": "negative",
+          "preconditions": "Usuário comum logado.",
+          "steps": [
+            {
+              "action": "Procurar a opção Admin na navegação",
+              "expected_result": "Opção não exibida"
+            },
+            {
+              "action": "Forçar o modo admin (sessionStorage app_mode=admin) e recarregar",
+              "expected_result": "Redirecionado para a Home"
+            }
+          ]
+        },
+        {
+          "key": "CT-040",
+          "title": "Admin exclui anúncio em cascata",
+          "rf": [
+            "RF033",
+            "RF037"
+          ],
+          "severity": "critical",
+          "priority": "medium",
+          "type": "functional",
+          "behavior": "destructive",
+          "preconditions": "Admin logado; anúncio de teste com solicitações e mensagens.",
+          "steps": [
+            {
+              "action": "Admin → Anúncios → Excluir e confirmar",
+              "expected_result": "Anúncio removido sem erro de chave estrangeira"
+            },
+            {
+              "action": "Abrir a aba Logs",
+              "expected_result": "Registro com data/hora, autor, ação e alvo"
+            }
+          ]
+        },
+        {
+          "key": "CT-041",
+          "title": "Admin bane usuário e não consegue banir outro admin",
+          "rf": [
+            "RF034",
+            "RF037"
+          ],
+          "severity": "critical",
+          "priority": "medium",
+          "type": "security",
+          "behavior": "negative",
+          "preconditions": "Admin logado.",
+          "steps": [
+            {
+              "action": "Banir um usuário comum",
+              "expected_result": "Usuário marcado como banido; log registrado"
+            },
+            {
+              "action": "Tentar banir um administrador",
+              "expected_result": "Ação negada com mensagem de proteção"
+            }
+          ]
+        },
+        {
+          "key": "CT-042",
+          "title": "Admin altera preços e aplica desconto",
+          "rf": [
+            "RF035"
+          ],
+          "severity": "normal",
+          "priority": "low",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "Admin logado.",
+          "steps": [
+            {
+              "action": "Anúncios → Preços: alterar diária e aplicar 15% de desconto",
+              "expected_result": "Valores atualizados nos detalhes do item; log registrado"
+            }
+          ]
+        },
+        {
+          "key": "CT-043",
+          "title": "Admin conversa com qualquer usuário",
+          "rf": [
+            "RF036"
+          ],
+          "severity": "normal",
+          "priority": "low",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "Admin logado; usuário sem aluguel com o admin.",
+          "steps": [
+            {
+              "action": "Usuários → Conversar",
+              "expected_result": "Chat aberto com envio liberado"
+            },
+            {
+              "action": "Enviar mensagem",
+              "expected_result": "Usuário recebe a mensagem"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S09",
+      "title": "09 · Aplicativo Android e requisitos não funcionais",
+      "description": "Cenário: o MVP roda no Android (faixa de teste fechado) e na web com desempenho, compatibilidade e segurança adequados. Requisitos: RF038, RNF002, RNF005, RNF008, RNF011, RNF013, RNF014.",
+      "cases": [
+        {
+          "key": "CT-044",
+          "title": "Instalar pela faixa de teste da Play Store e abrir",
+          "rf": [
+            "RF038",
+            "RNF014"
+          ],
+          "severity": "blocker",
+          "priority": "high",
+          "type": "smoke",
+          "behavior": "positive",
+          "tags": [
+            "alfa",
+            "beta",
+            "smoke"
+          ],
+          "preconditions": "Testador incluído na lista de teste.",
+          "steps": [
+            {
+              "action": "Aceitar o convite pelo link de teste e instalar",
+              "expected_result": "App com.alugapp.app instalado"
+            },
+            {
+              "action": "Abrir o app",
+              "expected_result": "Splash e tela de Login exibidos sem erro"
+            }
+          ]
+        },
+        {
+          "key": "CT-045",
+          "title": "Links de e-mail e login com Google retornam ao app",
+          "rf": [
+            "RF001",
+            "RF006",
+            "RF009",
+            "RF038"
+          ],
+          "severity": "major",
+          "priority": "high",
+          "type": "functional",
+          "behavior": "positive",
+          "preconditions": "App 1.0.2 (versionCode 3) ou superior instalado; com.alugapp.app://auth-callback cadastrada em Supabase → Authentication → Redirect URLs (issues #22–#24).",
+          "steps": [
+            {
+              "action": "No app, cadastrar um novo usuário e abrir no celular o link de confirmação recebido por e-mail",
+              "expected_result": "O AlugApp abre (não o navegador) já autenticado"
+            },
+            {
+              "action": "No app, Esqueci minha senha → abrir no celular o link de redefinição",
+              "expected_result": "O AlugApp abre na tela Redefinir Senha; nova senha funciona no login"
+            },
+            {
+              "action": "Abrir novamente o mesmo link de redefinição",
+              "expected_result": "Aviso \"Este link expirou ou já foi usado\" e app no Login"
+            },
+            {
+              "action": "No app, Entrar com Google e escolher a conta",
+              "expected_result": "Navegador do sistema abre e, ao concluir, o AlugApp volta ao primeiro plano autenticado"
+            }
+          ],
+          "tags": [
+            "alfa"
+          ]
+        },
+        {
+          "key": "CT-046",
+          "title": "Compatibilidade de navegadores e dispositivos",
+          "rf": [
+            "RNF008",
+            "RNF002"
+          ],
+          "severity": "normal",
+          "priority": "medium",
+          "type": "compatibility",
+          "behavior": "positive",
+          "preconditions": "Chrome, Firefox, Edge e Safari atualizados; Android 7+.",
+          "steps": [
+            {
+              "action": "Executar CT-010, CT-022 e CT-026 em cada navegador e no Android",
+              "expected_result": "Mesmo comportamento e layout íntegro (sem rolagem horizontal)"
+            }
+          ]
+        },
+        {
+          "key": "CT-047",
+          "title": "Publicação web com HTTPS e rotas SPA",
+          "rf": [
+            "RNF011"
+          ],
+          "severity": "major",
+          "priority": "medium",
+          "type": "smoke",
+          "behavior": "positive",
+          "preconditions": "Build publicado na Vercel.",
+          "steps": [
+            {
+              "action": "Acessar a URL via http://",
+              "expected_result": "Redirecionado para https:// com certificado válido"
+            },
+            {
+              "action": "Recarregar a página em uma tela interna",
+              "expected_result": "App carrega sem 404"
+            }
+          ]
+        },
+        {
+          "key": "CT-048",
+          "title": "Navegação por teclado e foco visível",
+          "rf": [
+            "RNF005"
+          ],
+          "severity": "minor",
+          "priority": "low",
+          "type": "usability",
+          "behavior": "positive",
+          "preconditions": "Versão web.",
+          "steps": [
+            {
+              "action": "Navegar Login e Cadastro apenas com Tab/Enter",
+              "expected_result": "Todos os campos e botões alcançáveis com foco visível"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "S10",
+      "title": "10 · Testes automatizados (unitários e de componente)",
+      "description": "Testes automatizados com Jest + Testing Library executados em todo push/PR pelo GitHub Actions e publicados no Qase por scripts/qase/publicar-jest.js. A chave [AUT-xxx] no nome do teste vincula o resultado ao caso.",
+      "automated": true,
+      "cases": [
+        {
+          "key": "AUT-001",
+          "title": "validateCPF aceita CPF válido com e sem máscara",
+          "rf": [
+            "RF002"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts"
+        },
+        {
+          "key": "AUT-002",
+          "title": "validateCPF rejeita CPF com dígito verificador incorreto",
+          "rf": [
+            "RF002"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-003",
+          "title": "validateCPF rejeita sequência repetida, tamanho inválido e vazio",
+          "rf": [
+            "RF002"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-004",
+          "title": "maskCPF formata progressivamente e limita a 11 dígitos",
+          "rf": [
+            "RF001"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts"
+        },
+        {
+          "key": "AUT-005",
+          "title": "maskPhone formata telefone com DDD",
+          "rf": [
+            "RF001"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts"
+        },
+        {
+          "key": "AUT-006",
+          "title": "maskCEP formata CEP no padrão 00000-000",
+          "rf": [
+            "RF003"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts"
+        },
+        {
+          "key": "AUT-007",
+          "title": "maskDate formata data de nascimento DD/MM/AAAA",
+          "rf": [
+            "RF001"
+          ],
+          "file": "src/lib/__tests__/validacoes.test.ts"
+        },
+        {
+          "key": "AUT-008",
+          "title": "encrypt/decrypt fazem ida e volta e o texto cifrado difere do original",
+          "rf": [
+            "RF002",
+            "RNF010"
+          ],
+          "file": "src/lib/__tests__/crypto.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-009",
+          "title": "encrypt gera cifras diferentes para o mesmo valor (salt aleatório)",
+          "rf": [
+            "RNF010"
+          ],
+          "file": "src/lib/__tests__/crypto.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-010",
+          "title": "decrypt devolve o valor original quando o dado não está cifrado (legado) ou a chave é outra",
+          "rf": [
+            "RNF010"
+          ],
+          "file": "src/lib/__tests__/crypto.test.ts",
+          "type": "security",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-011",
+          "title": "hashCPF ignora a máscara e gera SHA-256 determinístico de 64 caracteres",
+          "rf": [
+            "RNF010"
+          ],
+          "file": "src/lib/__tests__/crypto.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-012",
+          "title": "censura palavras proibidas sem diferenciar maiúsculas, preservando o tamanho",
+          "rf": [
+            "RF029",
+            "RNF012"
+          ],
+          "file": "src/lib/__tests__/censura.test.ts"
+        },
+        {
+          "key": "AUT-013",
+          "title": "não censura palavras legítimas que contêm um termo proibido (falso positivo)",
+          "rf": [
+            "RF029",
+            "RNF012"
+          ],
+          "file": "src/lib/__tests__/censura.test.ts",
+          "behavior": "negative",
+          "type": "regression"
+        },
+        {
+          "key": "AUT-014",
+          "title": "contemPalavraProibida identifica mensagens que devem ser moderadas",
+          "rf": [
+            "RF029"
+          ],
+          "file": "src/lib/__tests__/censura.test.ts"
+        },
+        {
+          "key": "AUT-015",
+          "title": "haversineKm calcula distâncias conhecidas",
+          "rf": [
+            "RF020"
+          ],
+          "file": "src/lib/__tests__/geocoding.test.ts"
+        },
+        {
+          "key": "AUT-016",
+          "title": "buildAddressQuery monta a consulta e exige cidade",
+          "rf": [
+            "RF018"
+          ],
+          "file": "src/lib/__tests__/geocoding.test.ts"
+        },
+        {
+          "key": "AUT-017",
+          "title": "geocodeAddress consulta o Nominatim restrito ao Brasil e converte as coordenadas",
+          "rf": [
+            "RF018"
+          ],
+          "file": "src/lib/__tests__/geocoding.test.ts",
+          "type": "integration"
+        },
+        {
+          "key": "AUT-018",
+          "title": "geocodeAddress retorna null em erro HTTP, resultado vazio ou falha de rede",
+          "rf": [
+            "RF018"
+          ],
+          "file": "src/lib/__tests__/geocoding.test.ts",
+          "behavior": "negative",
+          "type": "integration"
+        },
+        {
+          "key": "AUT-019",
+          "title": "calcularTotal conta as diárias do período e multiplica pela diária",
+          "rf": [
+            "RF023"
+          ],
+          "file": "src/lib/__tests__/aluguel.test.ts"
+        },
+        {
+          "key": "AUT-020",
+          "title": "calcularTotal rejeita período vazio, invertido ou com início igual ao fim",
+          "rf": [
+            "RF023"
+          ],
+          "file": "src/lib/__tests__/aluguel.test.ts",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-021",
+          "title": "rangeContemIndisponivel detecta data pontual bloqueada dentro do período (inclusive bordas)",
+          "rf": [
+            "RF016",
+            "RF023"
+          ],
+          "file": "src/lib/__tests__/aluguel.test.ts"
+        },
+        {
+          "key": "AUT-022",
+          "title": "rangeContemIndisponivel respeita bloqueio recorrente por dia da semana",
+          "rf": [
+            "RF016",
+            "RF023"
+          ],
+          "file": "src/lib/__tests__/aluguel.test.ts"
+        },
+        {
+          "key": "AUT-023",
+          "title": "calcularPrecosPeriodo aplica 7/30 diárias e os descontos semanal e mensal",
+          "rf": [
+            "RF015"
+          ],
+          "file": "src/lib/__tests__/aluguel.test.ts"
+        },
+        {
+          "key": "AUT-024",
+          "title": "isAdmin reconhece papel admin nos metadados e no perfil",
+          "rf": [
+            "RF032"
+          ],
+          "file": "src/lib/__tests__/admin.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-025",
+          "title": "isAdmin aceita e-mail autorizado ignorando caixa e espaços, e nega usuário comum",
+          "rf": [
+            "RF032"
+          ],
+          "file": "src/lib/__tests__/admin.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-026",
+          "title": "isAdmin nega acesso a administrador com permissão revogada",
+          "rf": [
+            "RF032"
+          ],
+          "file": "src/lib/__tests__/admin.test.ts",
+          "type": "security",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-027",
+          "title": "banUser bane usuário comum e bloqueia o banimento de administradores",
+          "rf": [
+            "RF034"
+          ],
+          "file": "src/lib/__tests__/admin.test.ts",
+          "type": "security"
+        },
+        {
+          "key": "AUT-028",
+          "title": "trilha de auditoria registra data, autor, ação e alvo, mantendo os 300 mais recentes",
+          "rf": [
+            "RF037",
+            "RNF009"
+          ],
+          "file": "src/lib/__tests__/admin.test.ts"
+        },
+        {
+          "key": "AUT-029",
+          "title": "App sem sessão ativa exibe a tela de Login",
+          "rf": [
+            "RF005"
+          ],
+          "file": "src/App.test.tsx",
+          "layer": "e2e",
+          "type": "smoke"
+        },
+        {
+          "key": "AUT-030",
+          "title": "Login exige e-mail e senha antes de chamar o Supabase",
+          "rf": [
+            "RF005"
+          ],
+          "file": "src/pages/__tests__/Login.test.tsx",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-031",
+          "title": "Login com credenciais inválidas exibe mensagem amigável",
+          "rf": [
+            "RF005"
+          ],
+          "file": "src/pages/__tests__/Login.test.tsx",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-032",
+          "title": "Login com e-mail não confirmado orienta o usuário a confirmar o cadastro",
+          "rf": [
+            "RF005"
+          ],
+          "file": "src/pages/__tests__/Login.test.tsx",
+          "behavior": "negative"
+        },
+        {
+          "key": "AUT-033",
+          "title": "Login com credenciais válidas confirma o acesso",
+          "rf": [
+            "RF005"
+          ],
+          "file": "src/pages/__tests__/Login.test.tsx"
+        },
+        {
+          "key": "AUT-034",
+          "title": "Botão Google inicia OAuth com o provedor google e URL de retorno",
+          "rf": [
+            "RF006"
+          ],
+          "file": "src/pages/__tests__/Login.test.tsx"
+        },
+        {
+          "key": "AUT-035",
+          "title": "URLs de retorno usam o esquema nativo no app e a origem na web",
+          "rf": [
+            "RF009",
+            "RF038"
+          ],
+          "file": "src/lib/__tests__/deepLink.test.ts"
+        },
+        {
+          "key": "AUT-036",
+          "title": "parseAuthCallback lê tokens do fragmento, código PKCE da query e erros",
+          "rf": [
+            "RF009",
+            "RF038"
+          ],
+          "file": "src/lib/__tests__/deepLink.test.ts"
+        },
+        {
+          "key": "AUT-037",
+          "title": "link de redefinição de senha restaura a sessão e abre a tela de nova senha",
+          "rf": [
+            "RF009",
+            "RF038"
+          ],
+          "file": "src/lib/__tests__/deepLink.test.ts"
+        },
+        {
+          "key": "AUT-038",
+          "title": "confirmação de cadastro e PKCE restauram a sessão sem abrir a redefinição de senha",
+          "rf": [
+            "RF001",
+            "RF006",
+            "RF038"
+          ],
+          "file": "src/lib/__tests__/deepLink.test.ts"
+        },
+        {
+          "key": "AUT-039",
+          "title": "link expirado ou sessão inválida avisam o usuário e não restauram a sessão",
+          "rf": [
+            "RF009",
+            "RF038"
+          ],
+          "file": "src/lib/__tests__/deepLink.test.ts",
+          "behavior": "negative"
+        }
+      ]
+    }
+  ]
+}

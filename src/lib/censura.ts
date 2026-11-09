@@ -29,6 +29,15 @@ export const PALAVRAS_CENSURADAS: string[] = [
 
 // ─── Funções utilitárias ──────────────────────────────────────────────────────
 
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Casa a palavra apenas como palavra inteira (nunca dentro de outra palavra),
+ * considerando letras acentuadas. Ex.: "cu" não casa em "cuidado" ou "documento".
+ */
+const palavraRegex = (palavra: string, flags: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(palavra)}(?![\\p{L}\\p{N}])`, flags);
+
 /**
  * Substitui palavras proibidas por asteriscos no texto.
  * Ex: "que merda isso" → "que ***** isso"
@@ -36,8 +45,7 @@ export const PALAVRAS_CENSURADAS: string[] = [
 export function censurarTexto(texto: string): string {
   let resultado = texto;
   for (const palavra of PALAVRAS_CENSURADAS) {
-    const regex = new RegExp(palavra, "gi");
-    resultado = resultado.replace(regex, (match) => "*".repeat(match.length));
+    resultado = resultado.replace(palavraRegex(palavra, "giu"), (match) => "*".repeat(match.length));
   }
   return resultado;
 }
@@ -47,7 +55,5 @@ export function censurarTexto(texto: string): string {
  * Útil para bloquear envio em vez de apenas censurar.
  */
 export function contemPalavraProibida(texto: string): boolean {
-  return PALAVRAS_CENSURADAS.some((p) =>
-    new RegExp(p, "i").test(texto)
-  );
+  return PALAVRAS_CENSURADAS.some((p) => palavraRegex(p, "iu").test(texto));
 }

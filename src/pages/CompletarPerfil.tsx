@@ -1,50 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { maskCPF, maskPhone, maskDate, maskCEP, validateCPF } from '../lib/validacoes';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, LogOut } from 'lucide-react';
-
-const maskCPF = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-};
-
-const maskPhone = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-};
-
-const maskDate = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 2) return d;
-  if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-  return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
-};
-
-const maskCEP = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 5) return d;
-  return `${d.slice(0, 5)}-${d.slice(5)}`;
-};
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
 const inputClass = 'w-full bg-gray-100 rounded-xl px-4 py-3 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm';
-
-const validateCPF = (cpf: string) => {
-  const digits = cpf.replace(/\D/g, '');
-  if (digits.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(digits)) return false;
-  const calcVerifier = (slice: number) => {
-    const numbers = digits.slice(0, slice).split('').map(Number);
-    const factor = slice + 1;
-    const total = numbers.reduce((acc, num, index) => acc + num * (factor - index), 0);
-    const remainder = total % 11;
-    return remainder < 2 ? 0 : 11 - remainder;
-  };
-  return calcVerifier(9) === Number(digits[9]) && calcVerifier(10) === Number(digits[10]);
-};
 
 export default function CompletarPerfil() {
   const { user, refreshProfile } = useAuth();

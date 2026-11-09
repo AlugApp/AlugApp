@@ -17,8 +17,8 @@ raiz/           app web React  ──build──▶  ../build/  ──cap sync�
 |---|---|
 | Application ID | `com.alugapp.app` |
 | Nome exibido | AlugApp |
-| versionCode | `1` |
-| versionName | `1.0.0` |
+| versionCode | `4` |
+| versionName | `1.0.3` |
 | minSdk / targetSdk | 24 (Android 7.0) / 36 |
 
 > ⚠️ O **Application ID é permanente**. Depois que a primeira build subir no Play
@@ -88,20 +88,50 @@ usuários.
 O GPS é declarado como `required="false"`, então aparelhos sem GPS continuam
 podendo instalar o app.
 
-## Limitação conhecida: links de e-mail do Supabase
+## Deep links de autenticação (links de e-mail e login com Google)
 
-`Cadastro.tsx`, `Login.tsx` e `RecuperarSenha.tsx` passam
-`redirectTo: window.location.origin` ao Supabase. Dentro da WebView do Capacitor
-esse valor é `http://localhost`, e não a URL da Vercel — então **confirmação de
-e-mail e redefinição de senha não voltam para o app** na versão Android.
+Dentro da WebView do Capacitor a origem é `http://localhost`, então os retornos do
+Supabase usam um esquema próprio do app (decisão registrada no ADR 0001 do
+repositório institucional):
 
-Resolver exige três passos combinados:
+```
+com.alugapp.app://auth-callback
+```
 
-1. registrar um deep link (`com.alugapp.app://`) no `AndroidManifest.xml`;
-2. trocar o `redirectTo` por esse esquema quando rodando nativo, e tratar o
-   retorno com o plugin `@capacitor/app` (`appUrlOpen`);
-3. adicionar a URL à allowlist de *Redirect URLs* no painel do Supabase.
+| Peça | Onde |
+|---|---|
+| `intent-filter` (VIEW/BROWSABLE, `scheme=com.alugapp.app`, `host=auth-callback`) | `android/app/src/main/AndroidManifest.xml` |
+| `redirectTo` / `emailRedirectTo` nativos quando `Capacitor.isNativePlatform()` | `src/lib/deepLink.ts` (`emailRedirectUrl`, `oauthRedirectUrl`) usado em `Cadastro.tsx`, `Login.tsx` e `RecuperarSenha.tsx` |
+| Leitura da URL recebida (`appUrlOpen` + `getLaunchUrl`), `setSession` / `exchangeCodeForSession` e abertura da tela *Redefinir senha* quando `type=recovery` | `src/lib/deepLink.ts` (`initDeepLinks`), registrado em `App.tsx` |
+| Plugin `@capacitor/app` | `package.json` (raiz, JS) e `mobile/package.json` (nativo, via `cap sync`) |
 
-O passo 3 é feito no painel do Supabase, fora deste repositório — por isso a
-correção ficou de fora desta build inicial. Para um teste interno fechado o
-restante do app funciona normalmente; vale resolver antes de abrir para produção.
+Na web nada muda: os links continuam voltando para a origem do site e o
+`supabase-js` lê a sessão da URL sozinho.
+
+### Configuração no painel do Supabase (obrigatória, fora do repositório)
+
+1. Supabase → projeto do AlugApp → **Authentication → URL Configuration**.
+2. Em **Redirect URLs**, clique em **Add URL** e adicione exatamente:
+   `com.alugapp.app://auth-callback`
+3. Mantenha a URL da Vercel em **Site URL** e na lista (a web continua usando).
+4. Salve.
+
+Sem esse passo o Supabase ignora o `redirectTo` do app e devolve o usuário para
+a *Site URL* (site na Vercel), que era o comportamento anterior.
+
+### Como testar no aparelho
+
+1. Gere e instale a build (`npm run build:apk` ou pela faixa de teste).
+2. **Redefinição de senha:** no app, *Esqueci minha senha* → abra o e-mail no
+   celular → o link abre o AlugApp na tela *Redefinir senha*.
+3. **Confirmação de cadastro:** cadastre-se pelo app → abra o link do e-mail →
+   o AlugApp abre já autenticado.
+4. **Google:** *Entrar com Google* abre o navegador do sistema → após escolher a
+   conta, o AlugApp volta ao primeiro plano autenticado.
+5. Link expirado/reutilizado: o app avisa "Este link expirou ou já foi usado".
+
+Teste rápido sem e-mail (aparelho conectado via USB):
+
+```bash
+adb shell am start -W -a android.intent.action.VIEW -d "com.alugapp.app://auth-callback#error=access_denied&error_code=otp_expired" com.alugapp.app
+```

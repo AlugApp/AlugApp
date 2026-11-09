@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { maskCPF, maskPhone, maskCEP } from '../lib/validacoes';
 import { useAuth } from "../contexts/AuthContext";
 import { decrypt } from "../lib/crypto";
 import {
@@ -14,29 +15,6 @@ interface EditarPerfilProps {
   onGoHome: () => void;
   onGoToMyAnnouncements: () => void;
 }
-
-// ─── Máscaras ─────────────────────────────────────────────────────────────────
-
-const maskCPF = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  return d
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-};
-
-const maskPhone = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-};
-
-const maskCEP = (v: string) => {
-  const d = v.replace(/\D/g, '').slice(0, 8);
-  if (d.length <= 5) return d;
-  return `${d.slice(0, 5)}-${d.slice(5)}`;
-};
 
 // ─── Lista de UFs ─────────────────────────────────────────────────────────────
 

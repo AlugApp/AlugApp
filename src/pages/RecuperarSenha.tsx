@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { emailRedirectUrl } from '../lib/deepLink';
 import { ArrowLeft, Mail } from 'lucide-react';
 
 interface RecuperarSenhaProps {
@@ -35,7 +36,7 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
     }
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: emailRedirectUrl(),
     });
 
     if (error) {

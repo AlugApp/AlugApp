@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../contexts/AuthContext";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { geocodeAddress, buildAddressQuery } from "../lib/geocoding";
+import { calcularPrecosPeriodo } from "../lib/aluguel";
 import { ArrowLeft, Plus, X, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 
 interface Categoria {
@@ -176,10 +177,7 @@ export default function AnunciarItem({ onGoBack }: AnunciarItemProps) {
   const isOutros = categoriaSelecionada?.nome_categoria?.toLowerCase() === "outros";
 
   const diario = Number(formData.valor_aluguel_diario) || 0;
-  const semanalBase = diario > 0 ? +(diario * 7).toFixed(2) : 0;
-  const mensalBase  = diario > 0 ? +(diario * 30).toFixed(2) : 0;
-  const semanalFinal = semanalBase > 0 ? +(semanalBase * (1 - (Number(descontoSemanal) || 0) / 100)).toFixed(2) : 0;
-  const mensalFinal  = mensalBase > 0  ? +(mensalBase  * (1 - (Number(descontoMensal)  || 0) / 100)).toFixed(2) : 0;
+  const { semanalBase, mensalBase, semanalFinal, mensalFinal } = calcularPrecosPeriodo(diario, descontoSemanal, descontoMensal);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
