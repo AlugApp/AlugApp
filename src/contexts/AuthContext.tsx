@@ -151,7 +151,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const isUserAdmin = checkIsAdmin(user, profile);
+  // Admin promovido pelo painel fica registrado no banco (tabela admins);
+  // a RLS usa a mesma função is_admin(), então a interface segue o banco.
+  const [isAdminDb, setIsAdminDb] = useState(false);
+  useEffect(() => {
+    if (!user) { setIsAdminDb(false); return; }
+    let ativo = true;
+    supabase.rpc('is_admin').then(({ data }) => { if (ativo) setIsAdminDb(data === true); });
+    return () => { ativo = false; };
+  }, [user]);
+
+  const isUserAdmin = checkIsAdmin(user, profile) || isAdminDb;
 
   return (
     <AuthContext.Provider value={{ session, user, profile, loading, isAdmin: isUserAdmin, refreshProfile, signOut }}>

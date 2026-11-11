@@ -137,7 +137,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
 
     const [itemsRes, usersRes, fotosRes] = await Promise.all([
       supabase.from('item').select('iditem, nome').in('iditem', itemIds),
-      supabase.from('users').select('id, fullName, avatar_url').in('id', userIds),
+      supabase.from('perfil_publico').select('id, fullName, avatar_url').in('id', userIds),
       supabase.from('fotoitem').select('iditem, url_foto').in('iditem', itemIds),
     ]);
 
@@ -193,7 +193,7 @@ export default function Chat({ onGoBack, onGoToPerfil, onGoToMyAnnouncements }: 
         if (newSol) {
           await load();
           const { data: targetUser } = await supabase
-            .from('users')
+            .from('perfil_publico')
             .select('id, fullName, avatar_url')
             .eq('id', targetUserId)
             .single();

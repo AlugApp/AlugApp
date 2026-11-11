@@ -29,7 +29,8 @@ describe('Módulo administrativo (RF032, RF034, RF037)', () => {
 
   test('[AUT-024] isAdmin reconhece papel admin nos metadados e no perfil', () => {
     expect(isAdmin({ email: 'x@y.com', app_metadata: { role: 'admin' } } as any, null)).toBe(true);
-    expect(isAdmin({ email: 'x@y.com', user_metadata: { role: 'admin' } } as any, null)).toBe(true);
+    // user_metadata é editável pelo próprio usuário, então não concede admin (issue #12)
+    expect(isAdmin({ email: 'x@y.com', user_metadata: { role: 'admin' } } as any, null)).toBe(false);
     expect(isAdmin(null, { email: 'x@y.com', role: 'admin' } as any)).toBe(true);
     expect(isAdmin(null, null)).toBe(false);
   });
