@@ -135,7 +135,7 @@ export default function DetalhesItem({ id, onGoBack }: DetalhesProps) {
 
       if (itemResult?.idlocador) {
         const { data: ownerResult } = await supabase
-          .from("users")
+          .from("perfil_publico")
           .select("id, fullName")
           .eq("auth_id", itemResult.idlocador)
           .maybeSingle();

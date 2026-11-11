@@ -185,6 +185,13 @@ src/
 |--------|-----------|-----|
 | `cleanup_orphaned_auth_user` | `p_email text` | Remove registro órfão de `auth.users` sem perfil em `users` |
 | `delete_user_account` | `input_password text` | Verifica senha, remove todos os dados do usuário e deleta conta do Auth |
+| `cadastro_existe` | `p_email`, `p_phone`, `p_cpf` (opcionais) | Diz se já há cadastro com o dado informado, sem devolver a linha |
+| `criar_perfil_cadastro` | dados do formulário + `p_auth_id` | Cria o perfil logo após o `signUp` (ainda sem sessão) |
+| `is_admin` | — | Diz se o usuário logado é administrador (tabela `admins` ou `app_metadata.role`) |
+| `admin_definir_admin` | `p_email text`, `p_admin boolean` | Promove ou revoga administrador (só admin) |
+| `admin_delete_item` / `admin_delete_user` / `admin_delete_avaliacao` | id do registro | Exclusão administrativa em cascata (só admin) |
+
+> **Controle de acesso:** as permissões de cada tabela (RLS) estão em `docs/arquitetura.md`, seção "Dados", e na migration `supabase/migrations/20261112_rls_seguranca.sql`. Para exibir nome e foto de outro usuário, use a view `perfil_publico`; a tabela `users` só devolve o próprio perfil (ou todos, para administradores).
 
 ### 3.4 Triggers
 

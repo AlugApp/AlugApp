@@ -98,11 +98,11 @@ export async function promoteToAdmin(target: {
     // Ignora erro de storage
   }
 
-  // Tenta atualizar no banco se a coluna role ou is_admin existir
+  // Registra no banco (tabela admins): é o que libera o acesso pela RLS
   try {
-    await supabase.from('users').update({ role: 'admin', is_admin: true } as any).eq('email', email);
+    await supabase.rpc('admin_definir_admin', { p_email: email, p_admin: true });
   } catch {
-    // Ignora se schema ainda não tiver a coluna
+    // Mantém a promoção local mesmo se o banco recusar
   }
 
   return {
@@ -136,9 +136,9 @@ export async function demoteAdmin(target: {
   }
 
   try {
-    await supabase.from('users').update({ role: 'user', is_admin: false } as any).eq('email', email);
+    await supabase.rpc('admin_definir_admin', { p_email: email, p_admin: false });
   } catch {
-    // Ignora se schema ainda não tiver a coluna
+    // Mantém a revogação local mesmo se o banco recusar
   }
 
   return {
@@ -164,10 +164,10 @@ export function isAdmin(
     return false;
   }
 
-  // 1. Verifica app_metadata ou user_metadata do Supabase Auth
+  // 1. Verifica app_metadata do Supabase Auth. user_metadata NÃO é usado:
+  //    o próprio usuário pode alterá-lo com supabase.auth.updateUser().
   const appRole = (user?.app_metadata as any)?.role;
-  const userRole = (user?.user_metadata as any)?.role;
-  if (appRole === 'admin' || userRole === 'admin') return true;
+  if (appRole === 'admin') return true;
 
   // 2. Verifica propriedades no perfil se existirem
   if (profile?.role === 'admin' || profile?.is_admin === true) return true;

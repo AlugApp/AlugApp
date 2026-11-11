@@ -132,7 +132,7 @@ const AppContent: React.FC = () => {
           if (sol.idlocador !== profile.id) return; // só interessa ao locador do item
           const [itemRes, userRes] = await Promise.all([
             supabase.from('item').select('nome').eq('iditem', sol.iditem).single(),
-            supabase.from('users').select('fullName').eq('id', sol.idlocatario).single(),
+            supabase.from('perfil_publico').select('fullName').eq('id', sol.idlocatario).single(),
           ]);
           const nome = userRes.data?.fullName || 'Alguém';
           const item = itemRes.data?.nome || 'item';
@@ -168,7 +168,7 @@ const AppContent: React.FC = () => {
 
           // Notificações para o LOCADOR (locatário mudou o status)
           if (isLocador) {
-            const userRes = await supabase.from('users').select('fullName').eq('id', newSol.idlocatario).single();
+            const userRes = await supabase.from('perfil_publico').select('fullName').eq('id', newSol.idlocatario).single();
             const nome = userRes.data?.fullName || 'Locatário';
             if (newSol.status === 'em_andamento')
               showToast(`${nome} confirmou o recebimento de "${item}"`, 'success', 'O item está em uso. Aguarde a devolução.');
@@ -198,7 +198,7 @@ const AppContent: React.FC = () => {
             .single();
           const sol = solRes.data as any;
           if (!sol || (sol.idlocador !== profile.id && sol.idlocatario !== profile.id)) return;
-          const userRes = await supabase.from('users').select('fullName').eq('id', msg.idremetente).single();
+          const userRes = await supabase.from('perfil_publico').select('fullName').eq('id', msg.idremetente).single();
           const nome = userRes.data?.fullName || 'Alguém';
           const preview = msg.conteudo?.length > 60 ? msg.conteudo.slice(0, 60) + '…' : msg.conteudo;
           showToast(`Mensagem de ${nome}`, 'info', preview);

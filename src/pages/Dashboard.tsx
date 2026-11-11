@@ -154,7 +154,7 @@ export default function Dashboard({ onGoHome, onGoToPerfil, onGoToMyAnnouncement
     const pendentes = solicitacoes.filter(s => s.status === "pendente");
     if (pendentes.length === 0) { setLocatariosMap({}); return; }
     const ids = Array.from(new Set(pendentes.map(s => s.idlocatario)));
-    supabase.from("users").select("id, fullName").in("id", ids).then(({ data }) => {
+    supabase.from("perfil_publico").select("id, fullName").in("id", ids).then(({ data }) => {
       const map: Record<number, string> = {};
       data?.forEach((u: any) => { map[u.id] = u.fullName; });
       setLocatariosMap(map);

@@ -174,7 +174,7 @@ export default function Home({ onGoToAnnounce, onGoToPerfil, onGoToMyAnnouncemen
     if (!sols || sols.length === 0) { setNotifItems([]); setNotifLoading(false); return; }
     const [itemsRes, usersRes] = await Promise.all([
       supabase.from("item").select("iditem, nome").in("iditem", sols.map((s: any) => s.iditem)),
-      supabase.from("users").select("id, fullName").in("id", sols.map((s: any) => s.idlocatario)),
+      supabase.from("perfil_publico").select("id, fullName").in("id", sols.map((s: any) => s.idlocatario)),
     ]);
     setNotifItems(sols.map((s: any) => ({
       id: s.idsolicitacao,

@@ -23,11 +23,9 @@ const RecuperarSenha: React.FC<RecuperarSenhaProps> = ({ onGoBack }) => {
 
     setLoading(true);
 
+    // Só pergunta se o e-mail existe; não lê a linha de users (issue #12)
     const { data, error: queryError } = await supabase
-      .from('users')
-      .select('email')
-      .eq('email', email)
-      .single();
+      .rpc('cadastro_existe', { p_email: email });
 
     if (queryError || !data) {
       setMessage({ type: 'error', text: 'E-mail não encontrado no banco de dados.' });

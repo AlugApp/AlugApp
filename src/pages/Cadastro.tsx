@@ -177,7 +177,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
     // ── E-mail duplicado ────────────────────────────────────────────────────
     const { data: emailExists } = await supabase
-      .from('users').select('id').eq('email', formData.email).maybeSingle();
+      .rpc('cadastro_existe', { p_email: formData.email });
     if (emailExists) {
       setInvalidFields(new Set(['email']));
       setMessage({ type: 'error', text: 'Já existe uma conta com este e-mail. Faça login.' });
@@ -246,7 +246,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
 
     // ── Telefone duplicado ────────────────────────────────────────────────
     const { data: phoneExists } = await supabase
-      .from('users').select('id').eq('phone', formData.phone).maybeSingle();
+      .rpc('cadastro_existe', { p_phone: formData.phone });
     if (phoneExists) {
       setInvalidFields(new Set(['phone']));
       setMessage({ type: 'error', text: 'Número de celular já cadastrado. Utilize outro número ou faça login.' });
@@ -307,7 +307,7 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
       if (!authData.user.identities || authData.user.identities.length === 0) {
         // Verifica se há perfil completo ou apenas cadastro incompleto/abandonado
         const { data: publicProfile } = await supabase
-          .from('users').select('id').eq('email', formData.email).maybeSingle();
+          .rpc('cadastro_existe', { p_email: formData.email });
 
         if (publicProfile) {
           // Conta completa — bloqueia
@@ -333,23 +333,26 @@ const Cadastro: React.FC<RegistrationFormProps> = ({ onGoToLogin }) => {
         (authData as any).user = retryData.user;
       }
 
-      // ── 2. Insere perfil na tabela users ────────────────────────────────
-      const { error: profileError } = await supabase.from('users').insert([{
-        auth_id: authData.user.id,
-        fullName: formData.fullName,
-        email: formData.email,
-        cpf: formData.cpf,
-        birthDate: isoDate,
-        phone: formData.phone,
-        gender: formData.gender,
-        cep: formData.cep,
-        rua: formData.rua,
-        numero: formData.numero,
-        complemento: formData.complemento || null,
-        bairro: formData.bairro,
-        cidade: formData.cidade,
-        estado: formData.estado,
-      }]);
+      // ── 2. Cria o perfil na tabela users ────────────────────────────────
+      // Com "Confirm email" ligado ainda não há sessão aqui; a função
+      // criar_perfil_cadastro valida a conta recém-criada e grava o perfil
+      // sem precisar liberar escrita anônima na tabela users (issue #12).
+      const { error: profileError } = await supabase.rpc('criar_perfil_cadastro', {
+        p_auth_id: authData.user.id,
+        p_full_name: formData.fullName,
+        p_email: formData.email,
+        p_cpf: formData.cpf,
+        p_birth_date: isoDate,
+        p_phone: formData.phone,
+        p_gender: formData.gender,
+        p_cep: formData.cep,
+        p_rua: formData.rua,
+        p_numero: formData.numero,
+        p_complemento: formData.complemento || null,
+        p_bairro: formData.bairro,
+        p_cidade: formData.cidade,
+        p_estado: formData.estado,
+      });
 
       if (profileError) {
         const msg = profileError.message.toLowerCase();

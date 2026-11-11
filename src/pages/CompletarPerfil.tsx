@@ -103,11 +103,11 @@ export default function CompletarPerfil() {
     setLoading(true);
 
     // CPF duplicado
-    const { data: cpfExists } = await supabase.from('users').select('id').eq('cpf', formData.cpf).maybeSingle();
+    const { data: cpfExists } = await supabase.rpc('cadastro_existe', { p_cpf: formData.cpf });
     if (cpfExists) { setError('CPF já cadastrado. Utilize outro CPF ou faça login.'); setLoading(false); return; }
 
     // Telefone duplicado
-    const { data: phoneExists } = await supabase.from('users').select('id').eq('phone', formData.phone).maybeSingle();
+    const { data: phoneExists } = await supabase.rpc('cadastro_existe', { p_phone: formData.phone });
     if (phoneExists) { setError('Número de celular já cadastrado. Utilize outro número ou faça login.'); setLoading(false); return; }
 
     const { error: dbError } = await supabase.from('users').upsert([{
